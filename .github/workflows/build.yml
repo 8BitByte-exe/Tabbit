@@ -55,6 +55,8 @@ jobs:
             echo "error: built app not found at $APP_PATH"
             exit 1
           fi
+          echo "Bundled Info.plist:"
+          plutil -p "$APP_PATH/Info.plist"
           rm -rf Payload ReceiptScanner.ipa
           mkdir Payload
           cp -R "$APP_PATH" Payload/
