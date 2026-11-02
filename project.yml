@@ -1,0 +1,53 @@
+# XcodeGen project spec. CI runs `xcodegen generate` to create Tabbit.xcodeproj.
+# The .xcodeproj and the Info.plist are generated: edit this file, not them.
+
+name: Tabbit
+
+options:
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+targets:
+  Tabbit:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Tabbit
+    settings:
+      base:
+        # ---------------------------------------------------------------
+        # App identity: change these two lines to rename the app or use
+        # a different bundle ID. Info.plist reads them via $(...).
+        # ---------------------------------------------------------------
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.receiptscanner
+        APP_DISPLAY_NAME: Tabbit
+
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+
+        # Swift 5 language mode keeps concurrency checking lenient on newer Xcode.
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+        # iPhone only.
+        TARGETED_DEVICE_FAMILY: "1"
+    info:
+      path: Tabbit/Info.plist
+      properties:
+        CFBundleDisplayName: "$(APP_DISPLAY_NAME)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSRequiresIPhoneOS: true
+        NSCameraUsageDescription: "$(APP_DISPLAY_NAME) uses the camera to scan your receipts."
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+
+schemes:
+  Tabbit:
+    build:
+      targets:
+        Tabbit: all
