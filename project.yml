@@ -31,6 +31,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: "$(APP_BUNDLE_ID)"
         MARKETING_VERSION: "0.4.0"
         CURRENT_PROJECT_VERSION: "4"
+        # Tabbit/Assets.xcassets/AppIcon.appiconset (made by Design/AppIcon/make_app_icon.py)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
         # Swift 5 language mode keeps concurrency checking lenient on newer Xcode.
         SWIFT_VERSION: "5.0"

@@ -72,7 +72,9 @@ Tabbit/
     ReceiptDetailView.swift    photo, editable fields with live checks, notes, raw text, export, delete
     PhotoViewer.swift          full-screen photos with zoom
     SettingsView.swift         language correction toggle, privacy summary
+  Assets.xcassets/AppIcon.appiconset  the app icon (1024 PNG)
   Debug/DemoMode.swift       DEBUG only: sample receipts + launch arguments for CI screenshots
+Design/AppIcon/              icon artwork source + make_app_icon.py (not part of the build)
 TabbitTests/                 XCTest unit tests (run in CI on a simulator)
   Support/TestSupport.swift  money("1.29"), ReceiptLayoutBuilder (fake Vision output), Fixtures loader
   Fixtures/*.json            scan exports used as test fixtures
@@ -127,7 +129,10 @@ The owner cares a lot about design. Every new screen must use the design system.
   - OCR garbles keywords, so match them fuzzily.
   - Sale and regular-price lines aren't purchases.
   - Use the arithmetic (items = subtotal, subtotal + tax = total) to choose between interpretations, and say so in `Receipt.notes` when it changes something.
-- No asset catalog yet. If you add one (for example an app icon) and CI fails while compiling assets, the runner may be missing a simulator runtime. Try adding `xcodebuild -downloadPlatform iOS` before the build.
+- **App icon:** `Tabbit/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`, a single 1024×1024 opaque PNG that iOS scales and masks.
+  - It's generated from the owner's artwork `Design/AppIcon/app-icon-source.jpg` by `python3 Design/AppIcon/make_app_icon.py <source> <output>`. The script crops the tile out of the black mockup, repaints the old rounded corners, and adds a 6% background margin so iOS's mask doesn't clip the bunny's hole.
+  - Rerun the script if the artwork changes.
+  - If CI ever fails while compiling assets, the runner may be missing a simulator runtime. Try `xcodebuild -downloadPlatform iOS` before the build.
 
 ## Test fixtures from real receipts
 
