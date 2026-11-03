@@ -144,7 +144,7 @@ jobs:
           mkdir -p screenshots
           for appearance in light dark; do
             xcrun simctl ui "$UDID" appearance "$appearance"
-            for screen in home detail edit empty settings processing; do
+            for screen in home detail detail-bottom edit empty settings processing; do
               xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
               xcrun simctl launch "$UDID" "$BUNDLE_ID" -TabbitDemo -TabbitScreen "$screen"
               sleep 5

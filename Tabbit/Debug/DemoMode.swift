@@ -4,7 +4,7 @@ import UIKit
 
 /// Screenshot mode for CI (Debug builds only; the Release IPA doesn't contain it).
 ///
-/// Launch arguments: `-TabbitDemo -TabbitScreen <home|detail|edit|empty|settings|processing>`.
+/// Launch arguments: `-TabbitDemo -TabbitScreen <home|detail|detail-bottom|edit|empty|settings|processing>`.
 /// Sample receipts go into a throwaway folder, never the real store.
 enum DemoMode {
 
@@ -49,7 +49,7 @@ enum DemoMode {
     @MainActor
     static func prepare(_ scanner: ScanViewModel, store: ReceiptStore) {
         switch screen {
-        case "detail", "edit":
+        case "detail", "detail-bottom", "edit":
             if let first = store.receipts.first {
                 scanner.path = [first.id]
             }

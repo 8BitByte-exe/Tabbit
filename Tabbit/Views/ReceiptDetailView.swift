@@ -47,6 +47,8 @@ struct ReceiptDetailView: View {
         }
     }
 
+    private static let bottomID = "bottom"
+
     private var navigationTitleText: String {
         return draft == nil ? "Receipt" : "Edit Receipt"
     }
@@ -59,21 +61,31 @@ struct ReceiptDetailView: View {
 
     private func content(_ saved: SavedReceipt) -> some View {
         let shown = draft?.receipt ?? saved.receipt
-        return ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                summaryCard(saved, shown: shown)
-                if saved.pageImageCount > 0 {
-                    photoCard(saved)
+        return ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                    summaryCard(saved, shown: shown)
+                    if saved.pageImageCount > 0 {
+                        photoCard(saved)
+                    }
+                    itemsCard(shown)
+                    totalsCard(shown)
+                    checksCard(shown)
+                    aboutCard(saved)
+                    rawTextCard(saved)
+                    actions(saved)
+                        .id(ReceiptDetailView.bottomID)
                 }
-                itemsCard(shown)
-                totalsCard(shown)
-                checksCard(shown)
-                aboutCard(saved)
-                rawTextCard(saved)
-                actions(saved)
+                .padding(.horizontal, Theme.Spacing.screen)
+                .padding(.vertical, Theme.Spacing.xl)
             }
-            .padding(.horizontal, Theme.Spacing.screen)
-            .padding(.vertical, Theme.Spacing.xl)
+            .onAppear {
+                #if DEBUG
+                if DemoMode.screen == "detail-bottom" {
+                    proxy.scrollTo(ReceiptDetailView.bottomID, anchor: .bottom)
+                }
+                #endif
+            }
         }
         .scrollDismissesKeyboard(.interactively)
         .task(id: saved.updatedAt) {
@@ -177,11 +189,15 @@ struct ReceiptDetailView: View {
                 SectionLabel(title: saved.pageImageCount == 1 ? "Photo" : "Photos (\(saved.pageImageCount) pages)")
                 ZStack {
                     if let image = firstPage {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
+                        // Fill the width and show the top of the receipt (merchant, date).
+                        Color.clear
                             .frame(height: 220)
                             .frame(maxWidth: .infinity)
+                            .overlay(alignment: .top) {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                            }
                             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous))
                     } else {
                         ProgressView()
@@ -256,19 +272,25 @@ struct ReceiptDetailView: View {
     }
 
     private func itemEditor(_ item: ReceiptDraft.Item) -> some View {
-        HStack(spacing: Theme.Spacing.s) {
-            TextField("Item", text: itemBinding(item.id, \.name))
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            TextField("Item name", text: itemBinding(item.id, \.name))
+                .textInputAutocapitalization(.words)
                 .insetField()
-            AmountField(placeholder: "0.00", text: itemBinding(item.id, \.amountText), label: "Amount for \(item.name)")
-                .frame(width: 112)
-            Button(action: {
-                draft?.removeItem(id: item.id)
-            }, label: {
-                Image(systemName: "minus")
-            })
-            .buttonStyle(NeumorphicIconButtonStyle(tint: Theme.Colors.accentInk))
-            .accessibilityLabel("Remove \(item.name.isEmpty ? "item" : item.name)")
+            HStack(spacing: Theme.Spacing.m) {
+                AmountField(placeholder: "0.00", text: itemBinding(item.id, \.amountText),
+                            label: "Amount for \(item.name)")
+                    .frame(maxWidth: 160)
+                Spacer(minLength: 0)
+                Button(action: {
+                    draft?.removeItem(id: item.id)
+                }, label: {
+                    Image(systemName: "minus")
+                })
+                .buttonStyle(NeumorphicIconButtonStyle(tint: Theme.Colors.accentInk))
+                .accessibilityLabel("Remove \(item.name.isEmpty ? "item" : item.name)")
+            }
         }
+        .padding(.bottom, Theme.Spacing.s)
     }
 
     // MARK: - Totals

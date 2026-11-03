@@ -102,7 +102,7 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Respect Reduce Motion (no scale animation), Reduce Transparency (no blurred edges, add an outline) and Increase Contrast (outline).
   - Support Dynamic Type: use the text styles in `Theme.Fonts`, and switch the card layout at accessibility sizes.
   - Give every control an accessibility label.
-- **Screenshots:** the CI `test` job launches the Debug build with `-TabbitDemo -TabbitScreen <home|detail|edit|empty|settings|processing>` in light and dark mode. It uploads the `design-screenshots` artifact and force-pushes the PNGs to the **`ci-screenshots`** branch. To review them from this container: `git fetch origin ci-screenshots && git show origin/ci-screenshots:home-light.png > /tmp/home-light.png`, then open the PNG. Look at them after any UI change.
+- **Screenshots:** the CI `test` job launches the Debug build with `-TabbitDemo -TabbitScreen <home|detail|detail-bottom|edit|empty|settings|processing>` in light and dark mode. It uploads the `design-screenshots` artifact and force-pushes the PNGs to the **`ci-screenshots`** branch. To review them from this container: `git fetch origin ci-screenshots && git show origin/ci-screenshots:home-light.png > /tmp/home-light.png`, then open the PNG. Look at them after any UI change.
 
 ## Storage
 
