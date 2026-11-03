@@ -18,8 +18,56 @@ struct RecognizedTextBlock: Equatable {
     let pageIndex: Int
 }
 
+/// JSON form used by scan exports and test fixtures:
+/// `{"text": "...", "confidence": 0.98, "x": 0.1, "y": 0.8, "width": 0.3, "height": 0.02, "page": 0}`.
+/// Coordinates are rounded to 4 decimals and confidence to 3 to keep files readable.
+extension RecognizedTextBlock: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case text
+        case confidence
+        case x
+        case y
+        case width
+        case height
+        case page
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let text = try container.decode(String.self, forKey: .text)
+        let confidence = try container.decodeIfPresent(Float.self, forKey: .confidence) ?? 1
+        let x = try container.decode(Double.self, forKey: .x)
+        let y = try container.decode(Double.self, forKey: .y)
+        let width = try container.decode(Double.self, forKey: .width)
+        let height = try container.decode(Double.self, forKey: .height)
+        let page = try container.decodeIfPresent(Int.self, forKey: .page) ?? 0
+        self.init(
+            text: text,
+            confidence: confidence,
+            boundingBox: CGRect(x: x, y: y, width: width, height: height),
+            pageIndex: page
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(text, forKey: .text)
+        try container.encode(RecognizedTextBlock.rounded(Double(confidence), places: 3), forKey: .confidence)
+        try container.encode(RecognizedTextBlock.rounded(Double(boundingBox.minX), places: 4), forKey: .x)
+        try container.encode(RecognizedTextBlock.rounded(Double(boundingBox.minY), places: 4), forKey: .y)
+        try container.encode(RecognizedTextBlock.rounded(Double(boundingBox.width), places: 4), forKey: .width)
+        try container.encode(RecognizedTextBlock.rounded(Double(boundingBox.height), places: 4), forKey: .height)
+        try container.encode(pageIndex, forKey: .page)
+    }
+
+    private static func rounded(_ value: Double, places: Int) -> Double {
+        let factor = pow(10.0, Double(places))
+        return (value * factor).rounded() / factor
+    }
+}
+
 /// Everything recognized from one scanning session (one or more pages).
-struct ScanResult: Equatable {
+struct ScanResult: Equatable, Codable {
     /// Number of pages that were scanned, including pages with no text.
     let pageCount: Int
 

@@ -69,3 +69,54 @@ jobs:
           name: ReceiptScanner
           path: ReceiptScanner.ipa
           if-no-files-found: error
+
+  # Runs in parallel with the build, so the IPA is still produced if a test fails.
+  test:
+    name: Unit tests (iPhone simulator)
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Pick an iPhone simulator
+        id: simulator
+        run: |
+          # Newest installed iOS runtime, first iPhone in it. Avoids hard-coding
+          # a device name that may not exist on the runner image.
+          UDID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          def version(runtime):
+              return [int(part) for part in runtime.split("iOS-")[-1].split("-") if part.isdigit()]
+          runtimes = sorted((r for r in devices if ".iOS-" in r), key=version, reverse=True)
+          for runtime in runtimes:
+              for device in devices[runtime]:
+                  if device["name"].startswith("iPhone"):
+                      print(runtime + " / " + device["name"], file=sys.stderr)
+                      print(device["udid"])
+                      sys.exit(0)
+          sys.exit("No available iPhone simulator found")
+          ')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Run unit tests
+        run: |
+          xcodebuild test \
+            -project Tabbit.xcodeproj \
+            -scheme Tabbit \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
