@@ -20,8 +20,10 @@ targets:
         # ---------------------------------------------------------------
         # App identity: change these two lines to rename the app or use
         # a different bundle ID. Info.plist reads them via $(...).
+        # The bundle ID must be unique across ALL Apple developers, or
+        # Sideloadly fails with "(9401) ... is not available".
         # ---------------------------------------------------------------
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.receiptscanner
+        PRODUCT_BUNDLE_IDENTIFIER: com.eightbitbyte.tabbit
         APP_DISPLAY_NAME: Tabbit
 
         MARKETING_VERSION: "0.1.0"

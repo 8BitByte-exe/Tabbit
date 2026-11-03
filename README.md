@@ -28,14 +28,14 @@ Free Apple ID limits:
 
 - Apps expire after **7 days**. Sideload the app again to renew it.
 - You can only have a few sideloaded apps at once, and only a limited number of new app IDs per week.
-- If Sideloadly says the bundle ID is unavailable, change `PRODUCT_BUNDLE_IDENTIFIER` in `project.yml` to something unique (for example `com.yourname.tabbit`), push, and use the new build.
+- Bundle IDs are unique across every Apple developer account. If Sideloadly fails with `(9401) … Identifier '…' is not available`, someone else already registered that ID. Change `PRODUCT_BUNDLE_IDENTIFIER` in `project.yml` to something else unique (for example `com.yourname.tabbit`), push, and sideload the new build.
 
 ## Changing the app name or bundle ID
 
 Both live in one place: the identity block at the top of the target settings in `project.yml`.
 
 ```yaml
-PRODUCT_BUNDLE_IDENTIFIER: com.example.receiptscanner
+PRODUCT_BUNDLE_IDENTIFIER: com.eightbitbyte.tabbit
 APP_DISPLAY_NAME: Tabbit
 ```
 
