@@ -24,9 +24,12 @@ struct ScanExport: Codable {
     let languageCorrection: Bool?
     /// Whether personal numbers were blanked out.
     let redacted: Bool?
+    /// The fields after the user corrected them in the app, if they did.
+    /// This is the "right answer" when the export becomes a test fixture.
+    let corrected: Receipt?
 
     init(scan: ScanResult, parsed: Receipt?, exportedAt: Date, appVersion: String?,
-         languageCorrection: Bool? = nil, redacted: Bool? = nil) {
+         languageCorrection: Bool? = nil, redacted: Bool? = nil, corrected: Receipt? = nil) {
         self.format = ScanExport.formatName
         self.version = ScanExport.currentVersion
         self.exportedAt = exportedAt
@@ -35,6 +38,7 @@ struct ScanExport: Codable {
         self.parsed = parsed
         self.languageCorrection = languageCorrection
         self.redacted = redacted
+        self.corrected = corrected
     }
 
     static func makeEncoder() -> JSONEncoder {

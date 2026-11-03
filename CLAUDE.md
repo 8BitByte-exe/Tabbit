@@ -29,19 +29,31 @@ Scanning, OCR, parsing and storage must run on the iPhone.
 ## Project structure
 
 ```
-project.yml                  XcodeGen spec: identity, targets, Info.plist, scheme
-.github/workflows/build.yml  CI: build job (unsigned IPA) + test job (simulator unit tests)
+project.yml                  XcodeGen spec: identity, targets, Info.plist, scheme (DEBUG flag in Debug)
+.github/workflows/build.yml  CI: build job (unsigned IPA) + test job (unit tests, then design screenshots)
 Tabbit/
-  TabbitApp.swift            @main SwiftUI App
+  TabbitApp.swift            @main App (store + scanner), RootView (navigation, processing/error overlays)
+  Design/
+    Theme.swift              ALL design tokens: palette (light/dark hex), radii, spacing, elevations,
+                             fonts (SF Rounded), motion, nav bar appearance, ContrastMath, Haptics
+    Components.swift         ClayBackground (raised/inset), InnerEdge (iOS 16 inner shadow),
+                             NeumorphicCard, NeumorphicInsetCard, NeumorphicButtonStyle,
+                             NeumorphicIconButtonStyle, NeumorphicCardButtonStyle, insetField(),
+                             SectionLabel, StatusChip
   Models/
-    ScanResult.swift         RecognizedTextBlock (text, confidence, normalized box, page) + ScanResult
-    Receipt.swift            Receipt, ReceiptLineItem, CalendarDate, ReceiptParserKind
+    ScanResult.swift         RecognizedTextBlock (text, confidence, normalized box, page, alternatives)
+    Receipt.swift            Receipt, ReceiptLineItem, CalendarDate; JSON stores money as text (MoneyCoding)
+    SavedReceipt.swift       a stored receipt: edited fields, parsed fields, raw OCR, photo count
+    ReceiptDraft.swift       editable copy (amounts as typed text) + MoneyInput (parse typed amounts)
     ScanExport.swift         JSON format of the Export button (also the test-fixture format)
+  Storage/
+    ReceiptStore.swift       @MainActor store: Application Support/Receipts/<id>/{receipt.json, page-N.jpg,
+                             thumbnail.jpg}; excluded from iCloud Backup; complete file protection
   Scanning/
     DocumentScannerView.swift  VNDocumentCameraViewController wrapped for SwiftUI
     TextRecognizer.swift       VNRecognizeTextRequest (.accurate, top 3 candidates); RecognitionOptions,
                                OCRSettings (language correction toggle, default off)
-    ScanProcessor.swift        OCR → parse → write export file (runs off the main thread)
+    ScanProcessor.swift        OCR → parse → JPEG pages/thumbnail (off the main thread); writeExport(for:)
     ExportRedactor.swift       blanks card/account/phone digits in exports
   Parsing/
     LineGrouper.swift          rebuilds receipt lines from Vision blocks: tilt guesses, grouping,
@@ -54,11 +66,13 @@ Tabbit/
     ReceiptValidator.swift     arithmetic checks: items = subtotal, subtotal + tax = total
     RegexHelpers.swift         NSRegularExpression helpers (`Patterns.make`)
   Views/
-    ScanViewModel.swift        @MainActor state machine: idle / recognizing / finished / failed
-    ContentView.swift          idle and error screens
-    ReceiptResultView.swift    parsed receipt / raw text, Export and Scan Again buttons
-    SettingsView.swift         language correction toggle
-    ScanButton.swift
+    ScanViewModel.swift        @MainActor: scan → process → save → open; navigation path; phases
+    HomeView.swift             landing page: header, Scan button, saved receipt cards, empty state;
+                               MoneyFormatter, DateText
+    ReceiptDetailView.swift    photo, editable fields with live checks, notes, raw text, export, delete
+    PhotoViewer.swift          full-screen photos with zoom
+    SettingsView.swift         language correction toggle, privacy summary
+  Debug/DemoMode.swift       DEBUG only: sample receipts + launch arguments for CI screenshots
 TabbitTests/                 XCTest unit tests (run in CI on a simulator)
   Support/TestSupport.swift  money("1.29"), ReceiptLayoutBuilder (fake Vision output), Fixtures loader
   Fixtures/*.json            scan exports used as test fixtures
@@ -68,6 +82,34 @@ TabbitTests/                 XCTest unit tests (run in CI on a simulator)
 - Info.plist keys go under `targets.Tabbit.info.properties` in `project.yml`.
 - **App identity lives in one place:** `APP_BUNDLE_ID` and `APP_DISPLAY_NAME` in the top-level `settings.base` of `project.yml`. Targets and Info.plist reference them as `$(APP_BUNDLE_ID)` / `$(APP_DISPLAY_NAME)`.
 - New Swift files in `Tabbit/` or `TabbitTests/` are picked up automatically by XcodeGen; there's no project file to edit.
+
+## Design system (soft, tactile, clay-like)
+
+The owner cares a lot about design. Every new screen must use the design system.
+
+- **Tokens only.** Colors, radii, spacing, shadows, fonts and motion come from `Theme`. Surfaces come from `Components.swift`: `NeumorphicCard`, `NeumorphicInsetCard`, `clayRaised()`, `clayInset()`, the button styles, and `insetField()`. Don't write `.shadow` or hex colors in views.
+- **Light comes from the top-left.** Raised surfaces get a light shadow at the top-left and a dark one at the bottom-right, plus an inner highlight and shade. Inset surfaces are the reverse. Inner shadows use `InnerEdge`, a blurred stroke that's offset and masked, which works on iOS 16.
+- **Shape:** continuous corners everywhere. Cards 30pt, buttons are capsules at least 56pt tall, fields 20pt.
+- **Color rules:**
+  - Coral (`accentTop`/`accentBottom`) is only a fill, with `onAccent` (dark) text on it.
+  - Coral text and icons use `accentInk`: #A63A26 in light mode, #FF8A73 in dark mode.
+  - Never use pure black or white text.
+  - Status (success/warning) always comes with an icon and a label.
+- **Accessibility:**
+  - Text must reach 4.5:1 on every surface. `ThemeContrastTests` checks this, so add any new color to it.
+  - Tap targets are at least 48pt.
+  - Pressed and selected states change more than the shadow (inset + scale + color/label).
+  - Respect Reduce Motion (no scale animation), Reduce Transparency (no blurred edges, add an outline) and Increase Contrast (outline).
+  - Support Dynamic Type: use the text styles in `Theme.Fonts`, and switch the card layout at accessibility sizes.
+  - Give every control an accessibility label.
+- **Screenshots:** the CI `test` job launches the Debug build with `-TabbitDemo -TabbitScreen <home|detail|edit|empty|settings|processing>` in light and dark mode. It uploads the `design-screenshots` artifact and force-pushes the PNGs to the **`ci-screenshots`** branch. To review them from this container: `git fetch origin ci-screenshots && git show origin/ci-screenshots:home-light.png > /tmp/home-light.png`, then open the PNG. Look at them after any UI change.
+
+## Storage
+
+- Saved receipts live only on the phone: `Application Support/Receipts/<uuid>/`. The folder is excluded from iCloud Backup (owner's choice: device-only), and files use `.complete` data protection.
+- They survive closing the app, restarting the phone and re-sideloading updates with the same bundle ID. Deleting the app deletes them.
+- `SavedReceipt.parsed` keeps the parser's original output, so edits can be undone and exports include both `parsed` and the user's `corrected` fields.
+- Money in JSON is text ("7.76") to avoid floating-point drift. Older numeric files still decode.
 
 ## Code rules
 
@@ -110,4 +152,6 @@ The design is tiered and entirely on-device. Each phone gets the best tier it su
    - Foundation Models with a `@Generable` receipt type. Guard with `#if canImport(FoundationModels)`, `@available(iOS 26, *)` and `SystemLanguageModel.default.availability`.
    - Validate the model's numbers: the arithmetic checks, and every amount must appear in the OCR text. Fall back to the rules result when they fail.
    - The model can only be tested on the phone; CI runners most likely can't run Apple Intelligence.
-4. **Saving with editing, plus CSV export** (share sheet). The owner still has to decide whether saved receipts go into iCloud Backup. Use iOS file protection either way.
+4. **Saving with editing, plus CSV export.**
+   - **Done (v0.4):** design system, home screen with saved receipts, editable receipt screen with live checks, on-device storage with photos (device-only, not in iCloud Backup).
+   - Next: CSV export through the share sheet.

@@ -1,6 +1,6 @@
 # Tabbit
 
-A native iOS receipt scanner written in SwiftUI. It scans a receipt with the camera, reads the text, and pulls out the merchant, date, line items, subtotal, tax and total. Then it checks that the numbers add up.
+A native iOS receipt scanner written in SwiftUI. It scans a receipt with the camera, reads the text, pulls out the merchant, date, line items, subtotal, tax and total, checks that the numbers add up, and keeps your receipts (with photos) on the phone so you can review and correct them.
 
 - iOS 16 or later, iPhone only
 - No third-party dependencies
@@ -36,12 +36,27 @@ Free Apple ID limits:
 
 ## Using the app
 
-- **Receipt / Raw text:** switch between the parsed receipt and the plain recognized text.
-- **Checks:** a green check means the items add up to the subtotal, or subtotal + tax matches the total. An orange warning means something was misread or missed.
-- **Question marks** next to an item name mean Vision had trouble reading it. Check those against the paper receipt.
-- **Notes** under "Parsed with" explain any judgment calls. For example: a line was read as the subtotal because its amount matched, or a "SALE PRICE" line was counted to make the items add up.
-- **Settings** (gear icon): "Correct words while reading" turns Vision's language correction on or off. It's off by default because it tends to turn receipt abbreviations into the wrong words. Try both on the same receipt.
-- **Export:** shares a JSON file with the recognized text and positions (no image) plus what the parser found. Card, account and phone digits are blanked out automatically. These files are how the parser gets better: they become unit-test fixtures in `TabbitTests/Fixtures/`. The repo is public, so check for anything else private before committing one.
+- **Home:** tap **Scan Receipt**. Saved receipts appear as cards (newest first) with a thumbnail, the total and a status chip ("Adds up" / "Check totals"). Long-press a card to delete it.
+- **Receipt screen:**
+  - The receipt's photo; tap it for full size with zoom.
+  - The fields, the checks, notes about any judgment calls, and the recognized text.
+- **Edit:** tap **Edit** to fix the merchant, date, items, subtotal, tax or total. You can add and remove items. The checks update as you type, and **Done** saves. **Undo my edits** brings back what the scan found.
+- **Question marks** next to an item name mean Vision had trouble reading it. Check those against the photo.
+- **Settings** (gear icon): "Correct words while reading" turns Vision's language correction on or off. It's off by default because it tends to turn receipt abbreviations into the wrong words.
+- **Export:**
+  - Shares a JSON file with the recognized text and positions (no image), what the parser found, and your corrections.
+  - Card, account and phone digits are blanked out automatically.
+  - These files become unit-test fixtures in `TabbitTests/Fixtures/`. The repo is public, so check for anything else private before committing one.
+
+## Privacy and storage
+
+- **On the iPhone only:** scanning, text recognition and parsing all run on the phone, and the app has no networking code.
+- **Encrypted while locked:** receipts and their photos are stored in the app's private storage, encrypted whenever the phone is locked.
+- **Not in iCloud Backup:** saved receipts are left out of backups, so they survive closing the app, restarting the phone and installing updates, but not deleting the app.
+
+## Design
+
+The look is soft and tactile, clay-like neumorphism: one light source at the top-left, rounded everything, SF Rounded type, cool grey-white surfaces in light mode, deep slate in dark mode, and a coral accent. All tokens live in `Tabbit/Design/Theme.swift`, and CI checks every text color for WCAG AA contrast. Screenshots of every screen in light and dark mode are published by CI to the `ci-screenshots` branch on every push.
 
 ## Changing the app name or bundle ID
 
