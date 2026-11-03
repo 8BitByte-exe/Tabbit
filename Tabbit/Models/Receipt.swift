@@ -24,6 +24,18 @@ struct CalendarDate: Equatable, Codable {
 struct ReceiptLineItem: Equatable, Codable {
     let name: String
     let amount: Decimal
+    /// Vision's confidence in the text this item came from (0...1), if known.
+    var confidence: Float? = nil
+
+    /// Below this confidence the app marks the name as uncertain.
+    static let uncertainBelow: Float = 0.6
+
+    var isUncertain: Bool {
+        guard let confidence = confidence else {
+            return false
+        }
+        return confidence < ReceiptLineItem.uncertainBelow
+    }
 }
 
 /// Which parser produced a receipt.

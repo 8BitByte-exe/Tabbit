@@ -32,6 +32,36 @@ final class LineGrouperTests: XCTestCase {
         XCTAssertEqual(texts, ["ORGANIC MILK 4.99", "EGGS 3.49"])
     }
 
+    func testTiltedPageStillPairsNamesAndPrices() {
+        let builder = ReceiptLayoutBuilder()
+            .row("SHOP")
+            .row("MILK", "3.49")
+            .row("BREAD", "2.99")
+            .row("EGGS", "4.29")
+            .row("TOTAL", "10.77")
+        for tilt: CGFloat in [0.02, -0.02] {
+            let texts = LineGrouper.lines(from: builder.build(tilt: tilt)).map { line in line.text }
+            XCTAssertEqual(texts, ["SHOP", "MILK 3.49", "BREAD 2.99", "EGGS 4.29", "TOTAL 10.77"], "tilt \(tilt)")
+        }
+    }
+
+    func testFlatPageHasNoTilt() {
+        let scan = ReceiptLayoutBuilder()
+            .row("SHOP")
+            .row("MILK", "3.49")
+            .row("TOTAL", "3.49")
+            .build()
+        XCTAssertEqual(LineGrouper.candidateSlopes(of: scan.blocks).first, 0)
+    }
+
+    func testAlternativeReadingsAreCarriedToTheLine() {
+        let scan = ReceiptLayoutBuilder()
+            .row("SJBTOTAL", "6.48", alternatives: ["SUBTOTAL"])
+            .build()
+        let line = LineGrouper.lines(from: scan).first
+        XCTAssertEqual(line?.alternativeTexts, ["SUBTOTAL 6.48"])
+    }
+
     func testPagesComeInOrder() {
         let scan = ReceiptLayoutBuilder()
             .row("PAGE ONE SHOP")

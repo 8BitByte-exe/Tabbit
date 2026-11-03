@@ -55,13 +55,14 @@ final class ScanViewModel: ObservableObject {
         }
 
         self.phase = .recognizing
+        let options = OCRSettings.current
 
         // This Task runs on the main actor (it inherits it from this class).
         // OCR and parsing run in a detached task so the UI stays responsive.
         Task {
             do {
                 let result: ProcessedScan = try await Task.detached(priority: .userInitiated) {
-                    return try ScanProcessor.process(images: images)
+                    return try ScanProcessor.process(images: images, options: options)
                 }.value
                 self.phase = .finished(result)
             } catch {

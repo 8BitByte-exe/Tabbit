@@ -12,6 +12,8 @@ func money(_ text: String) -> Decimal {
 /// `row("BANANAS", "1.29")` puts the name on the left and the price on the right as
 /// two separate blocks, the way Vision usually returns receipt lines with a wide gap.
 /// `row("Latte 4.50")` is a line Vision returned as a single block.
+/// `rightYOffset` moves the price up (+) or down (-); a text line is 0.02 high
+/// and rows are 0.03 apart.
 struct ReceiptLayoutBuilder {
     static let rowHeight: CGFloat = 0.02
     static let rowSpacing: CGFloat = 0.01
@@ -21,13 +23,25 @@ struct ReceiptLayoutBuilder {
     private var pageIndex: Int = 0
     private var pageCount: Int = 1
 
-    func row(_ left: String, _ right: String? = nil, rightYOffset: CGFloat = 0) -> ReceiptLayoutBuilder {
+    func row(_ left: String, _ right: String? = nil, rightYOffset: CGFloat = 0,
+             confidence: Float = 1, alternatives: [String] = []) -> ReceiptLayoutBuilder {
         var copy = self
         let minY = copy.nextRowTop - ReceiptLayoutBuilder.rowHeight
-        copy.blocks.append(copy.makeBlock(left, x: 0.05, y: minY, width: 0.45))
+        copy.blocks.append(copy.makeBlock(left, x: 0.05, y: minY, width: 0.45,
+                                          confidence: confidence, alternatives: alternatives))
         if let right = right {
-            copy.blocks.append(copy.makeBlock(right, x: 0.75, y: minY + rightYOffset, width: 0.15))
+            copy.blocks.append(copy.makeBlock(right, x: 0.75, y: minY + rightYOffset, width: 0.15,
+                                              confidence: 1, alternatives: []))
         }
+        copy.nextRowTop = minY - ReceiptLayoutBuilder.rowSpacing
+        return copy
+    }
+
+    /// A price on its own row at the right, under the previous row.
+    func priceRow(_ price: String) -> ReceiptLayoutBuilder {
+        var copy = self
+        let minY = copy.nextRowTop - ReceiptLayoutBuilder.rowHeight
+        copy.blocks.append(copy.makeBlock(price, x: 0.75, y: minY, width: 0.15, confidence: 1, alternatives: []))
         copy.nextRowTop = minY - ReceiptLayoutBuilder.rowSpacing
         return copy
     }
@@ -41,20 +55,39 @@ struct ReceiptLayoutBuilder {
     }
 
     /// `reversed: true` returns the blocks in reverse order, to prove the parser
-    /// doesn't depend on Vision's ordering.
-    func build(reversed: Bool = false) -> ScanResult {
-        let ordered: [RecognizedTextBlock] = reversed ? Array(blocks.reversed()) : blocks
+    /// doesn't depend on Vision's ordering. `tilt` rotates the page: each block
+    /// moves up by `tilt × (its center x − 0.5)`.
+    func build(reversed: Bool = false, tilt: CGFloat = 0) -> ScanResult {
+        let tilted = blocks.map { block -> RecognizedTextBlock in
+            let box = block.boundingBox
+            let moved = CGRect(x: box.minX, y: box.minY + tilt * (box.midX - 0.5), width: box.width, height: box.height)
+            return RecognizedTextBlock(text: block.text, confidence: block.confidence, boundingBox: moved,
+                                       pageIndex: block.pageIndex, alternatives: block.alternatives)
+        }
+        let ordered: [RecognizedTextBlock] = reversed ? Array(tilted.reversed()) : tilted
         return ScanResult(pageCount: pageCount, blocks: ordered)
     }
 
-    private func makeBlock(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat) -> RecognizedTextBlock {
+    private func makeBlock(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat,
+                           confidence: Float, alternatives: [String]) -> RecognizedTextBlock {
         return RecognizedTextBlock(
             text: text,
-            confidence: 1,
+            confidence: confidence,
             boundingBox: CGRect(x: x, y: y, width: width, height: ReceiptLayoutBuilder.rowHeight),
-            pageIndex: pageIndex
+            pageIndex: pageIndex,
+            alternatives: alternatives
         )
     }
+}
+
+/// Line items as "NAME = amount" strings, for readable assertions:
+/// `XCTAssertEqual(itemList(receipt), itemList([("BANANAS", "1.29")]))`.
+func itemList(_ receipt: Receipt) -> [String] {
+    return receipt.lineItems.map { item in "\(item.name) = \(item.amount)" }
+}
+
+func itemList(_ pairs: [(String, String)]) -> [String] {
+    return pairs.map { pair in "\(pair.0) = \(money(pair.1))" }
 }
 
 /// Loads JSON fixtures from TabbitTests/Fixtures. Files from the app's Export button work as-is.

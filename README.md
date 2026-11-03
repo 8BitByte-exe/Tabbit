@@ -38,7 +38,10 @@ Free Apple ID limits:
 
 - **Receipt / Raw text:** switch between the parsed receipt and the plain recognized text.
 - **Checks:** a green check means the items add up to the subtotal, or subtotal + tax matches the total. An orange warning means something was misread or missed.
-- **Export:** shares a JSON file with the recognized text and positions (no image) plus what the parser found. These files are how the parser gets better: they become unit-test fixtures in `TabbitTests/Fixtures/`. The repo is public, so remove anything private (card digits, address) before committing one.
+- **Question marks** next to an item name mean Vision had trouble reading it. Check those against the paper receipt.
+- **Notes** under "Parsed with" explain any judgment calls. For example: a line was read as the subtotal because its amount matched, or a "SALE PRICE" line was counted to make the items add up.
+- **Settings** (gear icon): "Correct words while reading" turns Vision's language correction on or off. It's off by default because it tends to turn receipt abbreviations into the wrong words. Try both on the same receipt.
+- **Export:** shares a JSON file with the recognized text and positions (no image) plus what the parser found. Card, account and phone digits are blanked out automatically. These files are how the parser gets better: they become unit-test fixtures in `TabbitTests/Fixtures/`. The repo is public, so check for anything else private before committing one.
 
 ## Changing the app name or bundle ID
 

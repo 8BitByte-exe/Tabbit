@@ -14,6 +14,25 @@ enum TextRecognizerError: LocalizedError {
     }
 }
 
+/// Settings for one text-recognition run.
+struct RecognitionOptions: Equatable {
+    /// Vision's language correction. When on, Vision replaces letters it isn't
+    /// sure about with dictionary words, which can turn receipt abbreviations
+    /// into different words. Off by default; see OCRSettings.
+    var languageCorrection: Bool = false
+}
+
+/// The user's text-recognition settings, stored in UserDefaults.
+enum OCRSettings {
+    static let languageCorrectionKey = "ocr.languageCorrection"
+
+    /// Read when a scan starts. Defaults to off.
+    static var current: RecognitionOptions {
+        let stored = UserDefaults.standard.object(forKey: languageCorrectionKey) as? Bool
+        return RecognitionOptions(languageCorrection: stored ?? false)
+    }
+}
+
 /// Runs Vision text recognition on scanned page images.
 ///
 /// Vision's text recognition always runs on the device; nothing is sent
@@ -23,25 +42,35 @@ enum TextRecognizerError: LocalizedError {
 /// so call them off the main thread.
 enum TextRecognizer {
 
+    /// Words that appear on most receipts. Vision only uses these hints
+    /// when language correction is on.
+    private static let receiptWords = [
+        "SUBTOTAL", "TOTAL", "TAX", "BALANCE", "DUE", "CHANGE", "CASH",
+        "VISA", "MASTERCARD", "DEBIT", "CREDIT", "SAVINGS", "COUPON", "QTY",
+    ]
+
     /// Recognizes the text on every page, in page order.
-    static func recognizeText(in images: [UIImage]) throws -> ScanResult {
+    static func recognizeText(in images: [UIImage], options: RecognitionOptions) throws -> ScanResult {
         var allBlocks: [RecognizedTextBlock] = []
         for (pageIndex, image) in images.enumerated() {
-            let pageBlocks = try recognizeText(in: image, pageIndex: pageIndex)
+            let pageBlocks = try recognizeText(in: image, pageIndex: pageIndex, options: options)
             allBlocks.append(contentsOf: pageBlocks)
         }
         return ScanResult(pageCount: images.count, blocks: allBlocks)
     }
 
     /// Recognizes the text on a single page.
-    static func recognizeText(in image: UIImage, pageIndex: Int) throws -> [RecognizedTextBlock] {
+    static func recognizeText(in image: UIImage, pageIndex: Int, options: RecognitionOptions) throws -> [RecognizedTextBlock] {
         guard let cgImage = image.cgImage else {
             throw TextRecognizerError.unreadableImage(page: pageIndex)
         }
 
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = true
+        request.usesLanguageCorrection = options.languageCorrection
+        if options.languageCorrection {
+            request.customWords = receiptWords
+        }
 
         let handler = VNImageRequestHandler(
             cgImage: cgImage,
@@ -53,14 +82,22 @@ enum TextRecognizer {
         var blocks: [RecognizedTextBlock] = []
         let observations: [VNRecognizedTextObservation] = request.results ?? []
         for observation in observations {
-            guard let candidate = observation.topCandidates(1).first else {
+            let candidates = observation.topCandidates(3)
+            guard let best = candidates.first else {
                 continue
             }
+            var alternatives: [String] = []
+            for candidate in candidates.dropFirst() {
+                if candidate.string != best.string && !alternatives.contains(candidate.string) {
+                    alternatives.append(candidate.string)
+                }
+            }
             let block = RecognizedTextBlock(
-                text: candidate.string,
-                confidence: candidate.confidence,
+                text: best.string,
+                confidence: best.confidence,
                 boundingBox: observation.boundingBox,
-                pageIndex: pageIndex
+                pageIndex: pageIndex,
+                alternatives: alternatives
             )
             blocks.append(block)
         }

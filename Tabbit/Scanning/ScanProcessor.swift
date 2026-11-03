@@ -17,25 +17,33 @@ struct ProcessedScan {
 /// Synchronous and can take a moment per page, so call it off the main thread.
 enum ScanProcessor {
 
-    static func process(images: [UIImage]) throws -> ProcessedScan {
-        let scan = try TextRecognizer.recognizeText(in: images)
+    static func process(images: [UIImage], options: RecognitionOptions) throws -> ProcessedScan {
+        let scan = try TextRecognizer.recognizeText(in: images, options: options)
         let receipt = RulesReceiptParser().parse(scan)
-        let exportURL = writeExport(scan: scan, receipt: receipt)
+        let exportURL = writeExport(scan: scan, receipt: receipt, options: options)
         return ProcessedScan(scan: scan, receipt: receipt, exportURL: exportURL)
     }
 
     private static let exportFilePrefix = "Tabbit-scan-"
 
     /// Writes the scan as JSON to the temporary folder and returns its URL.
-    /// Earlier exports are deleted first so receipts don't pile up on the device.
-    static func writeExport(scan: ScanResult, receipt: Receipt) -> URL? {
+    /// Personal numbers are blanked out first (ExportRedactor), and earlier
+    /// exports are deleted so receipts don't pile up on the device.
+    static func writeExport(scan: ScanResult, receipt: Receipt, options: RecognitionOptions) -> URL? {
         let fileManager = FileManager.default
         let folder = fileManager.temporaryDirectory
         removeOldExports(in: folder)
 
         let now = Date()
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        let export = ScanExport(scan: scan, parsed: receipt, exportedAt: now, appVersion: appVersion)
+        let export = ScanExport(
+            scan: ExportRedactor.redact(scan),
+            parsed: receipt,
+            exportedAt: now,
+            appVersion: appVersion,
+            languageCorrection: options.languageCorrection,
+            redacted: true
+        )
         let url = folder.appendingPathComponent(exportFilePrefix + timestamp(for: now) + ".json")
         do {
             let data = try ScanExport.makeEncoder().encode(export)

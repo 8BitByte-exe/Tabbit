@@ -39,19 +39,25 @@ Tabbit/
     ScanExport.swift         JSON format of the Export button (also the test-fixture format)
   Scanning/
     DocumentScannerView.swift  VNDocumentCameraViewController wrapped for SwiftUI
-    TextRecognizer.swift       VNRecognizeTextRequest (.accurate, language correction)
+    TextRecognizer.swift       VNRecognizeTextRequest (.accurate, top 3 candidates); RecognitionOptions,
+                               OCRSettings (language correction toggle, default off)
     ScanProcessor.swift        OCR → parse → write export file (runs off the main thread)
+    ExportRedactor.swift       blanks card/account/phone digits in exports
   Parsing/
-    LineGrouper.swift          rebuilds receipt lines from Vision blocks by height
+    LineGrouper.swift          rebuilds receipt lines from Vision blocks: tilt guesses, grouping,
+                               lone prices joined to the nearest name
+    ReceiptKeywords.swift      line roles with OCR-tolerant keywords (SJETOTAL → SUBTOTAL)
     AmountParser.swift         money amounts at the end of a line
     ReceiptDateParser.swift    purchase date (explicit patterns, not NSDataDetector)
-    RulesReceiptParser.swift   the rules-based parser (fallback tier, works on iOS 16+)
+    RulesReceiptParser.swift   the rules-based parser (fallback tier, works on iOS 16+): items,
+                               sale/deal lines, inferred subtotal, reconciliation, tilt choice
     ReceiptValidator.swift     arithmetic checks: items = subtotal, subtotal + tax = total
     RegexHelpers.swift         NSRegularExpression helpers (`Patterns.make`)
   Views/
     ScanViewModel.swift        @MainActor state machine: idle / recognizing / finished / failed
     ContentView.swift          idle and error screens
     ReceiptResultView.swift    parsed receipt / raw text, Export and Scan Again buttons
+    SettingsView.swift         language correction toggle
     ScanButton.swift
 TabbitTests/                 XCTest unit tests (run in CI on a simulator)
   Support/TestSupport.swift  money("1.29"), ReceiptLayoutBuilder (fake Vision output), Fixtures loader
@@ -74,6 +80,11 @@ TabbitTests/                 XCTest unit tests (run in CI on a simulator)
 - Keep UI state on the main actor (`ScanViewModel` is `@MainActor`). Do heavy work like OCR and parsing off the main thread (`ScanProcessor` runs in a detached task).
 - Bounding boxes are stored the way Vision returns them: normalized 0–1, with the origin at the **bottom-left** of the page.
 - Put parsing logic in plain Swift types that unit tests can cover. CI can only test logic; UI is tested on the phone.
+- Lessons from real receipts:
+  - Prices often sit up to a line higher or lower than their names (tilt, curl), so never match by height alone.
+  - OCR garbles keywords, so match them fuzzily.
+  - Sale and regular-price lines aren't purchases.
+  - Use the arithmetic (items = subtotal, subtotal + tax = total) to choose between interpretations, and say so in `Receipt.notes` when it changes something.
 - No asset catalog yet. If you add one (for example an app icon) and CI fails while compiling assets, the runner may be missing a simulator runtime. Try adding `xcodebuild -downloadPlatform iOS` before the build.
 
 ## Test fixtures from real receipts
@@ -91,7 +102,9 @@ The design is tiered and entirely on-device. Each phone gets the best tier it su
 | 3 | iOS 16+ | `VNRecognizeTextRequest` | Rules (`RulesReceiptParser`) |
 
 1. **Done:** scan + raw OCR text.
-2. **Done:** Export button, rules parser (tier 3), arithmetic checks, unit tests in CI, "Parsed with" label. Next: tune the rules with real exported receipts.
+2. **Done:** Export button, rules parser (tier 3), arithmetic checks, unit tests in CI, "Parsed with" label.
+   - **Done:** accuracy pass after the first real-world test (v0.3): tilt handling, fuzzy keywords, sale/deal lines, reconciliation, OCR settings, uncertain-name marks, redacted exports.
+   - Next: real exported receipts as fixtures.
 3. **Next:** iOS 26 tiers.
    - Vision's document reader.
    - Foundation Models with a `@Generable` receipt type. Guard with `#if canImport(FoundationModels)`, `@available(iOS 26, *)` and `SystemLanguageModel.default.availability`.

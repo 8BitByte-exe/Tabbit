@@ -57,13 +57,15 @@ struct ReceiptResultView: View {
                         .foregroundColor(Color.secondary)
                 } else {
                     ForEach(receipt.lineItems.indices, id: \.self) { index in
-                        amountRow(title: receipt.lineItems[index].name,
-                                  amount: receipt.lineItems[index].amount,
-                                  emphasized: false)
+                        itemRow(receipt.lineItems[index])
                     }
                 }
             } header: {
                 Text("Items (\(receipt.lineItems.count))")
+            } footer: {
+                if receipt.lineItems.contains(where: { item in item.isUncertain }) {
+                    Text("Names marked with a question mark were hard to read. Check them against the receipt.")
+                }
             }
 
             Section {
@@ -96,6 +98,20 @@ struct ReceiptResultView: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    private func itemRow(_ item: ReceiptLineItem) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(item.name)
+            if item.isUncertain {
+                Image(systemName: "questionmark.circle")
+                    .foregroundColor(Color.orange)
+                    .accessibilityLabel("Hard to read")
+            }
+            Spacer(minLength: 12)
+            Text(MoneyFormatter.string(from: item.amount))
+                .font(.body.monospacedDigit())
+        }
     }
 
     private func amountRow(title: String, amount: Decimal?, emphasized: Bool) -> some View {

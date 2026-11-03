@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var model = ScanViewModel()
+    @State private var isShowingSettings: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -21,6 +22,19 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle(appName)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: {
+                        isShowingSettings = true
+                    }, label: {
+                        Image(systemName: "gearshape")
+                    })
+                    .accessibilityLabel("Settings")
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsView()
         }
         .fullScreenCover(isPresented: $model.isShowingScanner) {
             DocumentScannerView(onOutcome: { outcome in
