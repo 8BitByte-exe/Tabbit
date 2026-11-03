@@ -1,0 +1,19 @@
+{
+  "appVersion" : "0.2.0",
+  "exportedAt" : "2026-11-03T12:00:00Z",
+  "format" : "tabbit-scan",
+  "scan" : {
+    "blocks" : [
+      { "confidence" : 0.99, "height" : 0.02, "page" : 0, "text" : "CORNER MARKET", "width" : 0.4, "x" : 0.3, "y" : 0.93 },
+      { "confidence" : 0.97, "height" : 0.02, "page" : 0, "text" : "11/03/2026 09:15", "width" : 0.35, "x" : 0.32, "y" : 0.9 },
+      { "confidence" : 0.98, "height" : 0.02, "page" : 0, "text" : "BREAD", "width" : 0.15, "x" : 0.05, "y" : 0.84 },
+      { "confidence" : 0.99, "height" : 0.02, "page" : 0, "text" : "3.49", "width" : 0.1, "x" : 0.8, "y" : 0.842 },
+      { "confidence" : 0.98, "height" : 0.02, "page" : 0, "text" : "MILK", "width" : 0.12, "x" : 0.05, "y" : 0.81 },
+      { "confidence" : 0.99, "height" : 0.02, "page" : 0, "text" : "2.99", "width" : 0.1, "x" : 0.8, "y" : 0.81 },
+      { "confidence" : 0.97, "height" : 0.02, "page" : 0, "text" : "TOTAL", "width" : 0.15, "x" : 0.05, "y" : 0.75 },
+      { "confidence" : 0.99, "height" : 0.02, "page" : 0, "text" : "6.48", "width" : 0.1, "x" : 0.8, "y" : 0.75 }
+    ],
+    "pageCount" : 1
+  },
+  "version" : 1
+}

@@ -8,6 +8,17 @@ options:
     iOS: "16.0"
   createIntermediateGroups: true
 
+settings:
+  base:
+    # ---------------------------------------------------------------
+    # App identity: change these two lines to rename the app or use
+    # a different bundle ID. Targets and Info.plist read them via $(...).
+    # The bundle ID must be unique across ALL Apple developers, or
+    # Sideloadly fails with "(9401) ... is not available".
+    # ---------------------------------------------------------------
+    APP_BUNDLE_ID: com.eightbitbyte.tabbit
+    APP_DISPLAY_NAME: Tabbit
+
 targets:
   Tabbit:
     type: application
@@ -17,17 +28,9 @@ targets:
       - path: Tabbit
     settings:
       base:
-        # ---------------------------------------------------------------
-        # App identity: change these two lines to rename the app or use
-        # a different bundle ID. Info.plist reads them via $(...).
-        # The bundle ID must be unique across ALL Apple developers, or
-        # Sideloadly fails with "(9401) ... is not available".
-        # ---------------------------------------------------------------
-        PRODUCT_BUNDLE_IDENTIFIER: com.eightbitbyte.tabbit
-        APP_DISPLAY_NAME: Tabbit
-
-        MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "1"
+        PRODUCT_BUNDLE_IDENTIFIER: "$(APP_BUNDLE_ID)"
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "3"
 
         # Swift 5 language mode keeps concurrency checking lenient on newer Xcode.
         SWIFT_VERSION: "5.0"
@@ -48,8 +51,31 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
 
+  # Unit tests for the parsing code. CI runs them on an iPhone simulator.
+  # JSON files in TabbitTests/Fixtures are bundled as test resources.
+  TabbitTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: TabbitTests
+    dependencies:
+      - target: Tabbit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: "$(APP_BUNDLE_ID).tests"
+        GENERATE_INFOPLIST_FILE: "YES"
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+        TARGETED_DEVICE_FAMILY: "1"
+
 schemes:
   Tabbit:
     build:
       targets:
         Tabbit: all
+        TabbitTests: [test]
+    test:
+      config: Debug
+      targets:
+        - TabbitTests

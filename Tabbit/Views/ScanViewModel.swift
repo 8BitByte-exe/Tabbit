@@ -12,8 +12,8 @@ final class ScanViewModel: ObservableObject {
         case idle
         /// Text recognition is running.
         case recognizing
-        /// Recognition finished.
-        case finished(ScanResult)
+        /// Recognition and parsing finished.
+        case finished(ProcessedScan)
         /// Something went wrong; the message is shown to the user.
         case failed(String)
     }
@@ -55,13 +55,14 @@ final class ScanViewModel: ObservableObject {
         }
 
         self.phase = .recognizing
+        let options = OCRSettings.current
 
         // This Task runs on the main actor (it inherits it from this class).
-        // The OCR itself runs in a detached task so the UI stays responsive.
+        // OCR and parsing run in a detached task so the UI stays responsive.
         Task {
             do {
-                let result: ScanResult = try await Task.detached(priority: .userInitiated) {
-                    return try TextRecognizer.recognizeText(in: images)
+                let result: ProcessedScan = try await Task.detached(priority: .userInitiated) {
+                    return try ScanProcessor.process(images: images, options: options)
                 }.value
                 self.phase = .finished(result)
             } catch {
