@@ -6,7 +6,10 @@ enum ReceiptLineRole: Equatable {
     /// A line that states the overall tax, like "TOTAL TAX".
     case taxTotal
     case tax
-    /// "GRAND TOTAL", "AMOUNT DUE", "BALANCE DUE".
+    /// Tax that's already in the prices: "INCL. VAT 1.50", "MwSt enthalten", "IVA INCLUIDO".
+    /// Informational only; it must not be added on top.
+    case includedTax
+    /// "GRAND TOTAL", "AMOUNT DUE", "BALANCE DUE", "ZU ZAHLEN", "A PAGAR".
     case strongTotal
     case total
     /// "TOTAL SAVINGS", "TOTAL ITEMS" and similar: not the amount paid.
@@ -15,6 +18,10 @@ enum ReceiptLineRole: Equatable {
     case tip
     /// Card, cash, change and similar lines.
     case payment
+    /// "MEMBER DISCOUNT", "COUPON", "RABATT": money off, even when printed without a minus.
+    case discount
+    /// Cash rounding ("ROUNDING -0.02"): part of the total, not a purchase.
+    case rounding
     /// Price information that usually isn't a separate purchase:
     /// "REG PRICE 4.99", "YOU SAVE 1.00", "CLUB CARD SAVINGS". With a negative
     /// amount it's a discount, and it counts.
@@ -106,7 +113,21 @@ enum ReceiptKeywords {
 
     // MARK: - Line roles
 
-    private static let taxWords: Set<String> = ["TAX", "TAXES", "HST", "GST", "PST", "QST", "VAT"]
+    /// Tax names in English and the common European and Latin American ones
+    /// (MwSt/USt in Germany, IVA in Spain, Italy and Portugal, TVA in France, BTW in the Netherlands…).
+    private static let taxWords: Set<String> = [
+        "TAX", "TAXES", "HST", "GST", "PST", "QST", "VAT",
+        "MWST", "UST", "IVA", "TVA", "BTW", "MOMS", "IGV", "DPH", "PTU", "KDV",
+    ]
+
+    /// Words for the total besides TOTAL itself (TOTALE, TOTAAL and TOTALT are within
+    /// TOTAL's OCR tolerance already). Matched exactly: fuzzy "SUMME" would catch "SUMMER".
+    private static let exactTotalWords: Set<String> = [
+        "SUMME", "SUMA", "GESAMT", "GESAMTSUMME", "GESAMTBETRAG", "IMPORTE",
+    ]
+
+    /// "Included" in several languages: INCL, INCLUDED, INCLUIDO, INCLUS, INKL, ENTHALTEN, INBEGREPEN.
+    private static let includedPrefixes = ["INCL", "INKL", "ENTHALT", "INBEGR", "COMPRIS"]
 
     private static let notATotalWords = [
         "SAVINGS", "SAVED", "SAVE", "DISCOUNT", "DISCOUNTS", "ITEMS", "ITEM",
@@ -117,7 +138,18 @@ enum ReceiptKeywords {
         "CHANGE", "CASH", "TEND", "TENDER", "TENDERED", "VISA", "MASTERCARD", "AMEX",
         "DISCOVER", "DEBIT", "CREDIT", "PAYMENT", "PAID", "AUTH", "APPROVAL", "APPROVED",
         "ACCOUNT", "ACCT", "REFUND", "POINTS", "REWARDS", "EBT",
+        // German, Spanish, French, Italian
+        "BARGELD", "GEGEBEN", "RÜCKGELD", "RUCKGELD", "RUECKGELD", "WECHSELGELD", "GIROCARD",
+        "MAESTRO", "KARTENZAHLUNG", "TARJETA", "EFECTIVO", "ENTREGADO", "CAMBIO", "ESPECES",
+        "RENDU", "CONTANTI", "PAYPAL", "CONTACTLESS",
     ]
+
+    /// Money-off words. A line with one of these is a discount even without a minus sign.
+    private static let discountWords = [
+        "DISCOUNT", "COUPON", "RABATT", "NACHLASS", "DESCUENTO", "REMISE", "SCONTO", "MARKDOWN",
+    ]
+
+    private static let roundingWords = ["ROUNDING", "RUNDUNG", "ARRONDI", "REDONDEO", "ARROTONDAMENTO"]
 
     private static let infoWords = [
         "REG", "REGULAR", "WAS", "ORIG", "ORIGINAL", "SAVE", "SAVED", "SAVES",
@@ -132,7 +164,8 @@ enum ReceiptKeywords {
 
     /// Words in quantity and deal lines like "2 @ 0.99" or "2 FOR 5.00".
     private static let detailWords: Set<String> = [
-        "FOR", "EA", "EACH", "LB", "LBS", "KG", "OZ", "X", "AT", "QTY", "PK", "CT",
+        "FOR", "EA", "EACH", "LB", "LBS", "KG", "G", "GR", "OZ", "L", "ML", "X", "AT", "QTY", "PK", "CT",
+        "STK", "ST", "PC", "PCS", "UN", "UDS", "U", "EUR", "USD", "GBP", "CAD", "AUD", "CHF",
     ]
 
     /// What kind of line this is.
@@ -145,9 +178,13 @@ enum ReceiptKeywords {
             return .subtotal
         }
 
-        let hasTotal = words.contains(where: { word in isLike(word, "TOTAL") })
+        let hasTotal = words.contains(where: { word in
+            isLike(word, "TOTAL") || exactTotalWords.contains(word)
+        })
         let hasTax = words.contains(where: { word in taxWords.contains(word) })
-        let saysIncluded = words.contains(where: { word in word.hasPrefix("INCL") })
+        let saysIncluded = words.contains(where: { word in
+            includedPrefixes.contains(where: { prefix in word.hasPrefix(prefix) })
+        })
 
         if hasTotal && hasTax && !saysIncluded {
             return .taxTotal
@@ -161,8 +198,15 @@ enum ReceiptKeywords {
         if hasTax && !saysIncluded {
             return .tax
         }
+        if hasTax && !hasTotal {
+            // "INCL. VAT 1.50": the tax is already in the prices. ("TOTAL INCL. VAT" is the total.)
+            return .includedTax
+        }
         if hasTotal {
             return .total
+        }
+        if words.contains(where: { word in matchesAny(word, roundingWords) }) {
+            return .rounding
         }
         if isTip(words) {
             return .tip
@@ -170,16 +214,20 @@ enum ReceiptKeywords {
         if words.contains(where: { word in paymentWords.contains(word) }) {
             return .payment
         }
+        if words.contains(where: { word in word == "OFF" || matchesAny(word, discountWords) }) {
+            return .discount
+        }
         if isInfo(words) {
             return .info
         }
         return .other
     }
 
-    /// "SUBTOTAL", "SUB TOTAL", "SUB-TOTAL", "SUBTTL" and misreads like "SJETOTAL".
+    /// "SUBTOTAL", "SUB TOTAL", "SUB-TOTAL", "SUBTTL", "SOUS-TOTAL", "ZWISCHENSUMME"
+    /// and misreads like "SJETOTAL".
     private static func isSubtotal(_ words: [String]) -> Bool {
         for (index, word) in words.enumerated() {
-            if isLike(word, "SUBTOTAL") || word == "SUBTTL" || word == "SUBTL" {
+            if isLike(word, "SUBTOTAL") || word == "SUBTTL" || word == "SUBTL" || word.hasPrefix("ZWISCHENSUM") {
                 return true
             }
             if index + 1 < words.count {
@@ -205,8 +253,13 @@ enum ReceiptKeywords {
         return false
     }
 
-    /// "GRAND TOTAL", "AMOUNT DUE", "BALANCE DUE", "TOTAL DUE", "TOTAL AMOUNT", "AMOUNT TOTAL".
+    /// "GRAND TOTAL", "AMOUNT DUE", "BALANCE DUE", "TOTAL DUE", "TOTAL AMOUNT", "AMOUNT TOTAL",
+    /// and "to pay" in other languages: "ZU ZAHLEN", "A PAGAR", "NET A PAYER", "TE BETALEN".
     private static func isStrongTotal(_ words: [String]) -> Bool {
+        if words.contains(where: { word in isLike(word, "ZAHLEN") || isLike(word, "BETALEN") || word == "PAGAR"
+            || word == "PAYER" }) {
+            return true
+        }
         guard words.count >= 2 else {
             return false
         }

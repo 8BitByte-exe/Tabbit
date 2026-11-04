@@ -17,6 +17,7 @@ struct PhotoViewer: View {
     @State private var showsPicker = false
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var confirmRemove = false
+    @State private var dialog: ClayDialog?
     @State private var isWorking = false
     @State private var toast: String?
 
@@ -52,9 +53,9 @@ struct PhotoViewer: View {
             if isWorking {
                 ProgressView()
                     .controlSize(.large)
-                    .tint(Theme.Colors.accentInk)
+                    .tint(Theme.Colors.onAccent)
                     .frame(width: 88, height: 88)
-                    .clayRaised(cornerRadius: 44)
+                    .background(Circle().fill(Theme.Colors.accentHigh))
             }
         }
         .toast($toast)
@@ -86,15 +87,20 @@ struct PhotoViewer: View {
                 }
             }
         }
-        .confirmationDialog("Remove the photos?", isPresented: $confirmRemove, titleVisibility: .visible) {
-            Button("Remove Photos", role: .destructive) {
-                store.removePhotos(receiptID)
-                load()
+        .clayDialog($dialog)
+        .onChange(of: confirmRemove) { _, asked in
+            guard asked else {
+                return
             }
-            Button("Cancel", role: .cancel) {
-            }
-        } message: {
-            Text("The receipt stays; only its pictures are deleted.")
+            confirmRemove = false
+            dialog = ClayDialog(title: "Remove the photos?",
+                                message: "The receipt stays; only its pictures are deleted.",
+                                actions: [
+                                    ClayDialog.Action(title: "Remove Photos", symbol: "trash", kind: .destructive) {
+                                        store.removePhotos(receiptID)
+                                        load()
+                                    },
+                                ])
         }
     }
 
@@ -119,42 +125,38 @@ struct PhotoViewer: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: Theme.Spacing.xl) {
+        HStack(spacing: Theme.Spacing.l) {
             Button(action: saveCurrentPage) {
                 Image(systemName: "square.and.arrow.down")
             }
             .buttonStyle(NeumorphicIconButtonStyle(size: 56))
             .accessibilityLabel("Save to Photos")
 
-            replaceMenu(symbol: "arrow.triangle.2.circlepath.camera", label: "Replace photo")
+            Button(action: {
+                showsScanner = true
+            }, label: {
+                Image(systemName: "camera.viewfinder")
+            })
+            .buttonStyle(NeumorphicIconButtonStyle(size: 56))
+            .accessibilityLabel("Replace with a new scan")
+
+            Button(action: {
+                showsPicker = true
+            }, label: {
+                Image(systemName: "photo.on.rectangle")
+            })
+            .buttonStyle(NeumorphicIconButtonStyle(size: 56))
+            .accessibilityLabel("Replace with a photo")
 
             Button(action: {
                 confirmRemove = true
             }, label: {
                 Image(systemName: "trash")
             })
-            .buttonStyle(NeumorphicIconButtonStyle(size: 56, tint: Theme.Colors.danger))
+            .buttonStyle(NeumorphicIconButtonStyle(prominence: .destructive, size: 56))
             .accessibilityLabel("Remove photos")
         }
         .padding(.bottom, Theme.Spacing.s)
-    }
-
-    private func replaceMenu(symbol: String, label: String) -> some View {
-        Menu {
-            Button(action: {
-                showsScanner = true
-            }, label: {
-                Label("Scan with Camera", systemImage: "camera.viewfinder")
-            })
-            Button(action: {
-                showsPicker = true
-            }, label: {
-                Label("Choose from Photos", systemImage: "photo.on.rectangle")
-            })
-        } label: {
-            ClayIconLabel(symbol: symbol, size: 56)
-        }
-        .accessibilityLabel(label)
     }
 
     private var emptyState: some View {

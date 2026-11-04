@@ -51,14 +51,11 @@ struct MoveReceiptSheet: View {
                     .foregroundStyle(Theme.Colors.text)
                 Spacer()
                 if isCurrent {
-                    Label("Here now", systemImage: "checkmark")
-                        .labelStyle(.iconOnly)
-                        .font(Theme.Fonts.headline)
-                        .foregroundStyle(Theme.Colors.accentInk)
+                    IconBadge(symbol: "checkmark", tone: .positive, size: 28)
                 }
             }
         })
-        .buttonStyle(NeumorphicCardButtonStyle(padding: Theme.Spacing.m))
+        .buttonStyle(NeumorphicCardButtonStyle(padding: Theme.Spacing.m, showsChevron: !isCurrent))
         .disabled(isCurrent)
         .accessibilityLabel(isCurrent ? "\(name), current place" : name)
     }

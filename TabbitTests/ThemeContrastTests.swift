@@ -8,7 +8,6 @@ final class ThemeContrastTests: XCTestCase {
     private let foregrounds: [(String, Theme.Swatch)] = [
         ("text", Theme.Palette.text),
         ("secondaryText", Theme.Palette.secondaryText),
-        ("accentInk", Theme.Palette.accentInk),
         ("warning", Theme.Palette.warning),
         ("danger", Theme.Palette.danger),
     ]
@@ -18,6 +17,7 @@ final class ThemeContrastTests: XCTestCase {
         ("surfaceHigh", Theme.Palette.surfaceHigh),
         ("surfaceLow", Theme.Palette.surfaceLow),
         ("inset", Theme.Palette.inset),
+        ("plate", Theme.Palette.plate),
     ]
 
     private func assertAA(_ foreground: Theme.Swatch, on surface: Theme.Swatch, _ name: String,
@@ -36,22 +36,22 @@ final class ThemeContrastTests: XCTestCase {
         }
     }
 
-    func testTextOnGreenFillsMeetsAA() {
+    func testTextOnMintMeetsAA() {
         assertAA(Theme.Palette.onAccent, on: Theme.Palette.accentHigh, "onAccent on accentHigh")
         assertAA(Theme.Palette.onAccent, on: Theme.Palette.accentLow, "onAccent on accentLow")
     }
 
-    func testTextOnPastelsMeetsAA() {
+    func testTextOnPastelsAndStatusFillsMeetsAA() {
         for (index, pastel) in Theme.pastels.enumerated() {
             assertAA(Theme.onPastel, on: pastel, "onPastel on pastel \(index)")
         }
+        assertAA(Theme.onPastel, on: Theme.Palette.cautionFill, "onPastel on cautionFill")
+        assertAA(Theme.onPastel, on: Theme.Palette.dangerFill, "onPastel on dangerFill")
     }
 
-    func testWhiteOnSwipeActionsMeetsAA() {
-        let white = Theme.Swatch(light: 0xFFFFFF, dark: 0xFFFFFF)
-        for (name, fill) in [("edit", Theme.Palette.swipeEdit), ("move", Theme.Palette.swipeMove),
-                             ("delete", Theme.Palette.swipeDelete)] {
-            assertAA(white, on: fill, "white on swipe \(name)")
+    func testMintIsTheSameInBothModes() {
+        for swatch in [Theme.Palette.accentHigh, Theme.Palette.accentLow] {
+            XCTAssertEqual(swatch.light, swatch.dark)
         }
     }
 

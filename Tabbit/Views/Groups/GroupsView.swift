@@ -13,100 +13,112 @@ enum GroupEditorTarget: Identifiable {
     }
 }
 
-/// The Groups tab: what everyone owes overall, search, and a card per group.
+/// The Groups tab: search, what everyone owes overall, and a card per group.
 struct GroupsView: View {
     @EnvironmentObject private var store: TabbitStore
     @EnvironmentObject private var router: AppRouter
 
     @State private var query = ""
     @State private var editing: GroupEditorTarget?
-    @State private var deleting: SplitGroup?
+    @State private var dialog: ClayDialog?
+    @State private var openRow: UUID?
 
     var body: some View {
-        List {
-            ScreenHeader(title: "Groups", subtitle: subtitle) {
-                Button(action: {
-                    editing = .new
-                }, label: {
-                    Image(systemName: "plus")
-                })
-                .buttonStyle(NeumorphicIconButtonStyle())
-                .accessibilityLabel("New group")
-            }
-            .clayRow(top: Theme.Spacing.l)
-
-            if store.groups.isEmpty {
-                emptyState
-                    .clayRow()
-            } else {
-                OverviewCard(owedToMeCents: totals.owedToMe, iOweCents: totals.iOwe)
-                    .clayRow()
-                ClaySearchField(text: $query, prompt: "Search groups or people")
-                    .clayRow(top: Theme.Spacing.m)
-
-                if filtered.isEmpty {
-                    EmptyStateView(symbol: "magnifyingglass", title: "No matches",
-                                   message: "No group or person matches “\(query)”.")
-                        .clayRow()
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                ScreenHeader(title: "Groups", subtitle: subtitle) {
+                    Button(action: {
+                        editing = .new
+                    }, label: {
+                        Image(systemName: "plus")
+                    })
+                    .buttonStyle(NeumorphicIconButtonStyle())
+                    .accessibilityLabel("New group")
                 }
-                ForEach(filtered) { group in
-                    groupRow(group)
+
+                if store.groups.isEmpty {
+                    emptyState
+                } else {
+                    ClaySearchField(text: $query, prompt: "Search groups or people")
+                    if query.isEmpty {
+                        OverviewCard(owedToMeCents: totals.owedToMe, iOweCents: totals.iOwe)
+                    }
+                    if filtered.isEmpty {
+                        EmptyStateView(symbol: "magnifyingglass", title: "No matches",
+                                       message: "No group or person matches “\(query)”.")
+                    }
+                    ForEach(filtered) { group in
+                        row(group)
+                    }
                 }
             }
+            .padding(.horizontal, Theme.Spacing.screen)
+            .padding(.top, Theme.Spacing.l)
+            .padding(.bottom, Theme.Spacing.xl)
         }
-        .clayList()
+        .scrollDismissesKeyboard(.immediately)
+        .themedScreen()
         .toolbar(.hidden, for: .navigationBar)
         .tabBarClearance()
         .sheet(item: $editing) { target in
             GroupEditorView(target: target)
                 .environmentObject(store)
         }
-        .confirmationDialog("Delete this group?", isPresented: deletingBinding, titleVisibility: .visible,
-                            presenting: deleting, actions: { group in
-            Button("Delete Group and Receipts", role: .destructive) {
-                store.deleteGroup(group.id, keepReceipts: false)
+        .clayDialog($dialog)
+        .task {
+            #if DEBUG
+            if DemoMode.screen == "dialog", let first = store.groups.first {
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                askToDelete(first)
             }
-            Button("Keep Receipts in My Receipts") {
-                store.deleteGroup(group.id, keepReceipts: true)
-            }
-            Button("Cancel", role: .cancel) {
-            }
-        }, message: { group in
-            Text("“\(group.displayName)” and its balances will be removed from this iPhone.")
-        })
+            #endif
+        }
     }
 
-    private func groupRow(_ group: SplitGroup) -> some View {
-        Button(action: {
-            router.push(.group(group.id))
-        }, label: {
-            GroupCard(group: group,
-                      total: store.total(of: group),
-                      receiptCount: store.receipts(in: group.id).count,
-                      myBalanceCents: store.balances(in: group)[Person.meID] ?? 0)
-        })
-        .buttonStyle(NeumorphicCardButtonStyle())
-        .clayRow()
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(action: {
-                deleting = group
-            }, label: {
-                Label("Delete", systemImage: "trash")
-            })
-            .tint(Theme.Colors.swipeDelete)
-            Button(action: {
+    private func row(_ group: SplitGroup) -> some View {
+        SwipeRow(id: group.id, openRow: $openRow, actions: [
+            SwipeAction(id: "edit", symbol: "pencil", label: "Edit", action: {
                 editing = .edit(group)
+            }),
+            SwipeAction(id: "delete", symbol: "trash", label: "Delete", isDestructive: true, action: {
+                askToDelete(group)
+            }),
+        ]) {
+            Button(action: {
+                if openRow != nil {
+                    withAnimation(Theme.Motion.standard) {
+                        openRow = nil
+                    }
+                } else {
+                    router.push(.group(group.id))
+                }
             }, label: {
-                Label("Edit", systemImage: "pencil")
+                GroupCard(group: group,
+                          total: store.total(of: group),
+                          receiptCount: store.receipts(in: group.id).count,
+                          myBalanceCents: store.balances(in: group)[Person.meID] ?? 0)
             })
-            .tint(Theme.Colors.swipeEdit)
+            .buttonStyle(NeumorphicCardButtonStyle())
         }
-        .accessibilityAction(named: "Edit") {
-            editing = .edit(group)
-        }
-        .accessibilityAction(named: "Delete") {
-            deleting = group
-        }
+    }
+
+    private func askToDelete(_ group: SplitGroup) {
+        dialog = ClayDialog(
+            title: "Delete “\(group.displayName)”?",
+            message: "The group and its balances are removed from this iPhone.",
+            actions: [
+                ClayDialog.Action(title: "Delete Group and Receipts", symbol: "trash", kind: .destructive) {
+                    withAnimation(Theme.Motion.standard) {
+                        store.deleteGroup(group.id, keepReceipts: false)
+                    }
+                },
+                ClayDialog.Action(title: "Keep Receipts in My Receipts", symbol: "tray.and.arrow.down") {
+                    withAnimation(Theme.Motion.standard) {
+                        store.deleteGroup(group.id, keepReceipts: true)
+                    }
+                },
+            ]
+        )
     }
 
     private var subtitle: String {
@@ -157,50 +169,36 @@ struct GroupsView: View {
         }
         return (owedToMe: owedToMe, iOwe: iOwe)
     }
-
-    private var deletingBinding: Binding<Bool> {
-        return Binding(get: {
-            deleting != nil
-        }, set: { isShowing in
-            if !isShowing {
-                deleting = nil
-            }
-        })
-    }
 }
 
-/// "You're owed" and "You owe", across all groups.
+/// "You're owed" and "You owe", across all groups. Information, so flat plates.
 struct OverviewCard: View {
     let owedToMeCents: Int
     let iOweCents: Int
 
     var body: some View {
         HStack(spacing: Theme.Spacing.m) {
-            figure(title: "You're owed", cents: owedToMeCents, symbol: "arrow.down.left",
-                   tint: Theme.Colors.accentInk)
-            figure(title: "You owe", cents: iOweCents, symbol: "arrow.up.right", tint: Theme.Colors.warning)
+            figure(title: "You're owed", cents: owedToMeCents, symbol: "arrow.down.left", tone: .positive)
+            figure(title: "You owe", cents: iOweCents, symbol: "arrow.up.right", tone: .caution)
         }
     }
 
-    private func figure(title: String, cents: Int, symbol: String, tint: Color) -> some View {
+    private func figure(title: String, cents: Int, symbol: String, tone: StatusTone) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Label {
+            HStack(spacing: Theme.Spacing.s) {
+                IconBadge(symbol: symbol, tone: cents > 0 ? tone : .neutral, size: 26)
                 Text(title)
-            } icon: {
-                Image(systemName: symbol)
-                    .font(Theme.Fonts.caption.weight(.heavy))
-                    .foregroundStyle(tint)
+                    .font(Theme.Fonts.subheadline)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .lineLimit(1)
             }
-            .font(Theme.Fonts.subheadline)
-            .foregroundStyle(Theme.Colors.secondaryText)
-            MoneyText(amount: Money.fromCents(cents), font: Theme.Fonts.mediumMoney,
-                      color: cents > 0 ? tint : Theme.Colors.text)
+            MoneyText(amount: Money.fromCents(cents), font: Theme.Fonts.mediumMoney)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
         }
         .padding(Theme.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .clayRaised(cornerRadius: Theme.Radius.card)
+        .clayPlate(cornerRadius: Theme.Radius.tile)
         .accessibilityElement(children: .combine)
     }
 }
@@ -220,7 +218,7 @@ struct GroupCard: View {
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.s))
                 : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.m))
             layout {
-                CategoryBadge(symbol: group.category.symbol, colorIndex: group.category.colorIndex, size: 52)
+                CategoryBadge(symbol: group.category.symbol, colorIndex: group.category.colorIndex, size: 48)
                 VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     Text(group.displayName)
                         .font(Theme.Fonts.headline)
@@ -238,7 +236,7 @@ struct GroupCard: View {
             HStack {
                 AvatarStack(people: group.members)
                 Spacer(minLength: Theme.Spacing.s)
-                BalanceChip(cents: myBalanceCents)
+                BalancePill(cents: myBalanceCents)
             }
         }
         .accessibilityElement(children: .combine)
@@ -247,6 +245,6 @@ struct GroupCard: View {
     private var countsText: String {
         let receipts = receiptCount == 1 ? "1 receipt" : "\(receiptCount) receipts"
         let people = group.members.count == 1 ? "1 person" : "\(group.members.count) people"
-        return "\(group.category.title) · \(receipts) · \(people)"
+        return "\(receipts) · \(people)"
     }
 }

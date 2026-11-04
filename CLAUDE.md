@@ -37,18 +37,19 @@ Tabbit/
                              ClayTabBar, add/scan/photo/editor presentations, processing/error overlays
   Design/
     Theme.swift              ALL design tokens: palette (light/dark hex), gradients, pastels, radii,
-                             spacing, sizes, elevations, fonts (SF Rounded), motion, nav bar,
+                             spacing, sizes, elevations, fonts (SF Rounded), motion,
                              AppearanceSetting, ContrastMath, Haptics
-    Components.swift         ClayBackground (.raised/.accent/.inset/.accentInset), InnerEdge,
-                             NeumorphicCard/InsetCard, button styles (capsule, icon, card, chip),
-                             ClayToggleStyle, ClaySegmentedPicker, ClaySearchField, SectionLabel,
-                             AvatarView/Stack, CategoryBadge, StatusChip, EmptyStateView, MoneyText
+    Components.swift         ClayBackground (.raised/.accent/.inset/.accentInset/.plate, pressed),
+                             InnerShading, InfoCard/InsetCard, button styles (capsule, icon, card,
+                             chip), ClayToggleStyle, ClaySegmentedPicker, ClaySearchField, FlowLayout,
+                             Expandable, SwipeRow, SectionLabel, AvatarView/Stack, CategoryBadge,
+                             IconBadge, StatusPill, EmptyStateView, MoneyText, ReceiptIcon
   Models/
     Person.swift             Person (me has the fixed Person.meID), displayName ("You")
     SplitGroup.swift         a group: name, category, members (me first), settlements
     ReceiptRecord.swift      a saved receipt: SplitItem (assignees, empty = everyone), TipValue ($/%),
                              autofilled/unreadable marks, raw scan + parser output; Settlement
-    Categories.swift         GroupCategory, SpendCategory (title, SF Symbol, pastel index)
+    Categories.swift         GroupCategory (12), SpendCategory (24): title, SF Symbol, pastel index
     Money.swift              formatting and whole-cent conversion
     MoneyInput.swift         parse typed amounts ("1.234,56", "$4", "0.50-")
     Receipt.swift            the parser's Receipt, ReceiptLineItem, CalendarDate; money as text (MoneyCoding)
@@ -76,22 +77,26 @@ Tabbit/
   Parsing/
     LineGrouper.swift          rebuilds receipt lines from Vision blocks: tilt guesses, grouping,
                                lone prices joined to the nearest name
-    ReceiptKeywords.swift      line roles with OCR-tolerant keywords (SJETOTAL → SUBTOTAL, TIP/GRATUITY)
+    ReceiptKeywords.swift      line roles with OCR-tolerant keywords (SJETOTAL → SUBTOTAL, TIP/GRATUITY),
+                               included tax, discounts, rounding; German/Spanish/French/Italian/Dutch words
     AmountParser.swift         money amounts at the end of a line
     ReceiptDateParser.swift    purchase date (explicit patterns, not NSDataDetector)
-    RulesReceiptParser.swift   the rules-based parser (fallback tier): items, sale/deal lines, tip,
-                               inferred subtotal, reconciliation, tilt choice
+    RulesReceiptParser.swift   the rules-based parser (fallback tier): items, sale/deal and weight lines,
+                               codes/flags in names, discounts, tip (not tip guides), VAT-included
+                               prices, rounding, inferred subtotal, reconciliation, tilt choice, merchant
     ReceiptValidator.swift     arithmetic checks: items = subtotal, subtotal + tax + tip = total
     RegexHelpers.swift         NSRegularExpression helpers (`Patterns.make`)
   Views/
     AppRouter.swift            AppTab, Route, per-tab navigation paths
     ReceiptFlow.swift          @MainActor: source sheet → camera/photos → OCR → editor → save
-    Shared/CommonViews.swift   clayRow/clayList (List of clay cards), ScreenHeader, FloatingAddButton,
-                               BalanceChip, AmountRow, DateText, toast, ActivityView, claySheet
+    Shared/CommonViews.swift   ScreenHeader, NavHeader + clayNavigation, swipe-back fix, SheetHeader,
+                               ClayDialog, DatePickerSheet, FloatingAddButton, BalancePill, AmountRow,
+                               DateText, toast, ActivityView, claySheet
     Groups/                    GroupsView (list, search, swipe), GroupEditorView, GroupDetailView
                                (+ ReceiptRow, receiptSwipeActions), SettleUpView
-    Receipts/                  MyReceiptsView, AddReceiptSheet, ReceiptEditorView, ReceiptPagerView
-                               (+ ReceiptDetailPage), MoveReceiptSheet, PhotoViewer (+ ZoomableImageView)
+    Receipts/                  MyReceiptsView (+ SortSheet), AddReceiptSheet, ReceiptEditorView
+                               (+ CategoryPickerSheet), ReceiptPagerView (+ ReceiptDetailPage),
+                               MoveReceiptSheet, PhotoViewer (+ ZoomableImageView)
     Profile/                   ProfileView (stats, Swift Charts ring and bars, ProfileEditSheet),
                                SettingsView (+ WhatsNewView)
   Resources/PrivacyInfo.xcprivacy  Apple privacy manifest
@@ -114,16 +119,31 @@ TabbitTests/                 XCTest unit tests (run in CI on a simulator)
 The owner cares a lot about design. Every new screen must use the design system.
 
 - **Tokens only.** Colors, radii, spacing, shadows, fonts and motion come from `Theme`. Surfaces come from `Components.swift`: `NeumorphicCard`, `NeumorphicInsetCard`, `clayRaised()`, `clayInset()`, the button styles, and `insetField()`. Don't write `.shadow` or hex colors in views.
-- **Matte, lit from the top-left.** Raised surfaces: a subtle diagonal gradient (`surfaceHigh` → `surfaceLow`), a crisp 1pt lit edge, a light shadow at the top-left and a dark one at the bottom-right. No inner gloss on raised surfaces (the owner found it glossy and muddy). Green fills get a green-tinted shadow (`accentShade`), never grey. Inset/pressed surfaces use inner shadows (`InnerEdge`, a blurred stroke that's offset and masked).
+- **Depth means "you can touch this".** This is how people tell buttons from information:
+  - **Raised clay** (soft shadows, lit edge) is only for things you press: buttons, chips, tappable cards. Tappable cards also show a small inset chevron (`NeumorphicCardButtonStyle`).
+  - **Flat plates** (`InfoCard`, `clayPlate()`: plate fill + hairline, no shadow) are for information.
+  - **Inset wells** (`clayInset()`, `insetField()`) are for typing and switches.
+- **Matte, lit from the top-left.** Raised: a subtle diagonal gradient (`surfaceHigh` → `surfaceLow`), a soft lit edge, a light shadow at the top-left and a dark one at the bottom-right. No inner gloss on raised surfaces (the owner found it glossy and muddy). Mint fills get a mint-tinted shadow (`accentShade`), never grey.
+- **Pressed and inset shading** is `InnerShading`: two gradient strokes that fade out before the middle, so the lit (bottom-right) side never shows a dark line. Pressing crossfades the raised and pressed looks (`ClayBackground(pressed:)`); don't swap styles abruptly.
 - **Shape:** continuous corners everywhere. Cards 28pt, tiles 20pt, fields 18pt, buttons are capsules at least 56pt tall (44pt compact).
+- **Neutrals:** light mode is clean white (`#F3F4F6` background, white surfaces); dark mode is neutral charcoal (`#1B1B1D`), with no green tint.
 - **Color rules:**
-  - Mint-sage (`accentHigh` #A8EECB → `accentLow` #6ED6A4) is only a fill, with `onAccent` (dark) text on it.
-  - Green text and icons use `accentInk`: #1B6844 in light mode, #8FE5BC in dark mode.
+  - The brand mint (`accentHigh` #A8EECB → `accentLow` #6ED6A4) is identical in light and dark mode (a test checks this). It is only ever a fill, with `onAccent` (dark) text and icons on it. There is no green text color: no dark greens anywhere.
+  - Status uses flat fills with an icon and a label: `StatusPill` / `IconBadge` with `StatusTone` (.positive mint, .caution amber, .danger rose, .neutral grey).
   - Avatars, category badges and charts use `Theme.pastels` with `onPastel` text.
-  - Swipe actions use `swipeEdit` / `swipeMove` / `swipeDelete` (iOS draws white on them).
+  - Inline error and warning text uses `danger` / `warning`, always next to an icon.
   - Never use pure black or white text.
   - Status (owed/owe/settled, warnings) always comes with an icon and a label.
-- **Navigation:** tab roots hide the navigation bar and show `ScreenHeader` + the floating `ClayTabBar`; pushed screens use the system bar and back button, so edge-swipe back works. Lists with swipe actions are `List` + `clayList()` + `clayRow()`. Sheets use `claySheet()`.
+- **No system chrome.** The owner doesn't want iOS's Liquid Glass controls in the app:
+  - Pushed screens use `.clayNavigation(title) { trailing buttons }` (clay back button). The system bar is hidden everywhere; an extension on `UINavigationController` keeps edge swipe-back working.
+  - Sheets use `SheetHeader` (clay close button) and `claySheet()`, with no toolbars.
+  - Keyboards get a clay Done bar (`safeAreaInset`), not a keyboard toolbar.
+  - Questions and choices use `ClayDialog` (`.clayDialog($dialog)`), not `alert` / `confirmationDialog` / `Menu`.
+  - Dates use `DatePickerSheet` (wheel), not the compact picker.
+  - Don't set a global `UINavigationBar.appearance()`: it also paints a bar into VisionKit's document camera.
+- **Lists** are `ScrollView` + `LazyVStack`. Rows with edit/move/delete are `SwipeRow` (slides left to reveal clay buttons, plus accessibility actions), not `List.swipeActions`.
+- **Chips wrap** with `FlowLayout`, so they stay inside their card; no horizontal chip scrolling.
+- **Drop-downs** use `Expandable`, which measures the content and animates its height so the card grows in place.
 - **Accessibility:**
   - Text must reach 4.5:1 on every surface. `ThemeContrastTests` checks this, so add any new color to it.
   - Tap targets are at least 48pt.
@@ -131,7 +151,7 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Respect Reduce Motion (no scale animation), Reduce Transparency (no blurred edges, add an outline) and Increase Contrast (outline).
   - Support Dynamic Type: use the text styles in `Theme.Fonts`, and switch the card layout at accessibility sizes.
   - Give every control an accessibility label.
-- **Screenshots:** the CI `test` job launches the Debug build with `-TabbitDemo -TabbitScreen <groups|group|receipt|settle|edit|add|mine|profile|settings|whatsnew|processing|empty>` in light and dark mode. It uploads the `design-screenshots` artifact and force-pushes the PNGs to the **`ci-screenshots`** branch. To review them from this container: `git fetch origin ci-screenshots && git show origin/ci-screenshots:groups-light.png > /tmp/groups-light.png`, then open the PNG. Look at them after any UI change.
+- **Screenshots:** the CI `test` job launches the Debug build with `-TabbitDemo -TabbitScreen <groups|group|swipe|receipt|settle|edit|category|add|mine|sort|profile|settings|whatsnew|processing|dialog|empty>` in light and dark mode. It uploads the `design-screenshots` artifact and force-pushes the PNGs to the **`ci-screenshots`** branch. To review them from this container: `git fetch origin ci-screenshots && git show origin/ci-screenshots:groups-light.png > /tmp/groups-light.png`, then open the PNG. Look at them after any UI change.
 
 ## Storage
 
@@ -158,6 +178,11 @@ The owner cares a lot about design. Every new screen must use the design system.
   - OCR garbles keywords, so match them fuzzily.
   - Sale and regular-price lines aren't purchases.
   - Use the arithmetic (items = subtotal, subtotal + tax = total) to choose between interpretations, and say so in `Receipt.notes` when it changes something.
+  - European prices usually include the tax (MwSt/IVA/TVA/BTW). If the items alone match the total, the tax line is informational and must not be added again.
+  - Keywords that are also ordinary words need exact matching ("SUMME" fuzzily matches "SUMMER", "BAR" is cash in German but also a chocolate bar). Only fuzz long, distinctive keywords.
+  - Discounts are sometimes printed without a minus; treat them as deductions, and let reconciliation undo that if the subtotal disagrees.
+  - Tip guides ("18% $7.20") printed under the total are not tips.
+  - Item names carry barcodes, PLU codes (3000–4999) and tax flags; strip them, but keep numbers that are part of the name ("1000 ISLAND").
 - **App icon:** `Tabbit/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`, a single 1024×1024 opaque PNG that iOS scales and masks.
   - It's generated from the owner's artwork `Design/AppIcon/app-icon-source.jpg` by `python3 Design/AppIcon/make_app_icon.py <source> <output>`. The script crops the tile out of the black mockup, repaints the old rounded corners, and adds a 6% background margin so iOS's mask doesn't clip the bunny's hole.
   - Rerun the script if the artwork changes.

@@ -104,11 +104,21 @@ final class LogicTests: XCTestCase {
     // MARK: - Category guessing and autofill
 
     func testCategoryGuesses() {
-        XCTAssertEqual(CategoryGuesser.guess(merchant: "The Daily Grind Cafe", items: []), .food)
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "The Daily Grind Cafe", items: []), .coffee)
         XCTAssertEqual(CategoryGuesser.guess(merchant: "FRESH MART", items: []), .groceries)
         XCTAssertEqual(CategoryGuesser.guess(merchant: "Hotel Lisboa", items: []), .lodging)
-        XCTAssertEqual(CategoryGuesser.guess(merchant: "", items: ["Unleaded fuel"]), .transport)
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "", items: ["Unleaded fuel"]), .fuel)
         XCTAssertEqual(CategoryGuesser.guess(merchant: "Zqx Ltd", items: []), .other)
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "Sushi Bar", items: []), .food)
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "The Corner Pub", items: []), .drinks)
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "Uber", items: []), .transport)
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "Ryanair", items: []), .travel)
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "Happy Paws Vet", items: []), .pets)
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "Uniqlo", items: []), .clothing)
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "Spotify", items: []), .subscriptions)
+        // Short keywords must be whole words: "inn" isn't in "dinner", "tea" isn't in "steak".
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "Sunday Dinner Club", items: []), .other)
+        XCTAssertEqual(CategoryGuesser.guess(merchant: "Big Steak", items: []), .other)
     }
 
     func testAutofillMarksWhatWasReadAndWhatWasnt() {

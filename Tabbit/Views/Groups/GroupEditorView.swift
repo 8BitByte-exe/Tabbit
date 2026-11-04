@@ -11,8 +11,7 @@ struct GroupEditorView: View {
     @State private var category: GroupCategory
     @State private var members: [Person]
     @State private var newPersonName = ""
-    @State private var removing: Person?
-    @State private var blockedMessage: String?
+    @State private var dialog: ClayDialog?
     @FocusState private var focus: Field?
 
     private enum Field: Hashable {
@@ -88,31 +87,13 @@ struct GroupEditorView: View {
                 focus = .name
             }
         }
-        .confirmationDialog("Remove this person?", isPresented: removingBinding, titleVisibility: .visible,
-                            presenting: removing, actions: { person in
-            Button("Remove \(person.name)", role: .destructive) {
-                withAnimation(Theme.Motion.standard) {
-                    members.removeAll { member in member.id == person.id }
-                }
-            }
-            Button("Cancel", role: .cancel) {
-            }
-        }, message: { person in
-            Text("\(person.name) is on receipts in this group. Items they shared go back to everyone, and receipts they paid move to you.")
-        })
-        .alert("Can't remove yet", isPresented: blockedBinding, actions: {
-            Button("OK", role: .cancel) {
-            }
-        }, message: {
-            Text(blockedMessage ?? "")
-        })
+        .clayDialog($dialog)
     }
 
     // MARK: - Category
 
     private var categoryGrid: some View {
-        let columns = [GridItem(.adaptive(minimum: 104), spacing: Theme.Spacing.s)]
-        return LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Spacing.s) {
+        FlowLayout {
             ForEach(GroupCategory.allCases) { option in
                 Button(action: {
                     withAnimation(Theme.Motion.standard) {
@@ -120,12 +101,12 @@ struct GroupEditorView: View {
                     }
                 }, label: {
                     Label(option.title, systemImage: option.symbol)
-                        .frame(maxWidth: .infinity)
                 })
                 .buttonStyle(ClayChipStyle(isSelected: category == option))
                 .accessibilityAddTraits(category == option ? [.isSelected] : [])
             }
         }
+        .padding(.vertical, Theme.Spacing.xs)
     }
 
     // MARK: - People
@@ -156,7 +137,7 @@ struct GroupEditorView: View {
             }
         }
         .padding(Theme.Spacing.l)
-        .clayRaised()
+        .clayPlate()
     }
 
     private func personRow(_ person: Person, removable: Bool) -> some View {
@@ -172,7 +153,7 @@ struct GroupEditorView: View {
                 }, label: {
                     Image(systemName: "minus")
                 })
-                .buttonStyle(NeumorphicIconButtonStyle(tint: Theme.Colors.danger))
+                .buttonStyle(NeumorphicIconButtonStyle(prominence: .destructive))
                 .accessibilityLabel("Remove \(person.name)")
             }
         }
@@ -213,9 +194,21 @@ struct GroupEditorView: View {
             settlement.from == person.id || settlement.to == person.id
         }
         if hasPayments {
-            blockedMessage = "\(person.name) has recorded payments in this group. Undo them in Settle Up first."
+            dialog = ClayDialog(title: "Can't remove \(person.name) yet",
+                                message: "\(person.name) has recorded payments in this group. Undo them in Settle Up first.",
+                                actions: [], cancelTitle: "OK")
         } else if store.isReferenced(person.id, in: group.id) {
-            removing = person
+            dialog = ClayDialog(
+                title: "Remove \(person.name)?",
+                message: "\(person.name) is on receipts in this group. Items they shared go back to everyone, and receipts they paid move to you.",
+                actions: [
+                    ClayDialog.Action(title: "Remove \(person.name)", symbol: "person.badge.minus", kind: .destructive) {
+                        withAnimation(Theme.Motion.standard) {
+                            members.removeAll { member in member.id == person.id }
+                        }
+                    },
+                ]
+            )
         } else {
             withAnimation(Theme.Motion.standard) {
                 members.removeAll { member in member.id == person.id }
@@ -235,25 +228,5 @@ struct GroupEditorView: View {
         }
         Haptics.success()
         dismiss()
-    }
-
-    private var removingBinding: Binding<Bool> {
-        return Binding(get: {
-            removing != nil
-        }, set: { isShowing in
-            if !isShowing {
-                removing = nil
-            }
-        })
-    }
-
-    private var blockedBinding: Binding<Bool> {
-        return Binding(get: {
-            blockedMessage != nil
-        }, set: { isShowing in
-            if !isShowing {
-                blockedMessage = nil
-            }
-        })
     }
 }

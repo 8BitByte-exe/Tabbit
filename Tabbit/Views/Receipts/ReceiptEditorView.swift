@@ -3,7 +3,7 @@ import UIKit
 
 /// Review or edit a receipt: merchant, date, category, who paid, items and who
 /// shared them, tax, tip and total, with the split updating as you type.
-/// Fields filled in by a scan are marked with sparkles; ones it couldn't read with a warning.
+/// Fields filled in by a scan carry a mint sparkle; ones it couldn't read, a warning.
 struct ReceiptEditorView: View {
     let session: EditorSession
 
@@ -13,7 +13,9 @@ struct ReceiptEditorView: View {
 
     @State private var form: ReceiptForm
     @State private var errorMessage: String?
-    @State private var confirmDiscard = false
+    @State private var dialog: ClayDialog?
+    @State private var choosingCategory = false
+    @State private var choosingDate = false
     @FocusState private var focus: EditorFocus?
 
     enum EditorFocus: Hashable {
@@ -52,81 +54,86 @@ struct ReceiptEditorView: View {
     // MARK: - Body
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Theme.Spacing.xl) {
-                    if session.isNew && session.record.source != .manual {
-                        scanBanner
-                    }
-                    detailsCard
-                    if isShared {
-                        paidByCard
-                    }
-                    itemsCard
-                    amountsCard
-                    if isShared {
-                        splitCard
-                    }
+        ScrollView {
+            VStack(spacing: Theme.Spacing.xl) {
+                SheetHeader(title: session.isNew ? "New Receipt" : "Edit Receipt", onClose: close)
+                if session.isNew && session.record.source != .manual {
+                    scanBanner
                 }
-                .padding(.horizontal, Theme.Spacing.screen)
-                .padding(.top, Theme.Spacing.l)
-                .padding(.bottom, Theme.Spacing.xxl)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .themedScreen()
-            .navigationTitle(session.isNew ? "New Receipt" : "Edit Receipt")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        if hasChanges {
-                            confirmDiscard = true
-                        } else {
-                            dismiss()
-                        }
-                    }
+                detailsCard
+                if isShared {
+                    paidByCard
                 }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") {
-                        focus = nil
-                    }
-                    .font(Theme.Fonts.headline)
+                itemsCard
+                amountsCard
+                if isShared {
+                    splitCard
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if focus == nil {
-                    saveBar
-                }
-            }
-            .confirmationDialog("Discard this receipt?", isPresented: $confirmDiscard, titleVisibility: .visible) {
-                Button(session.isNew ? "Discard Receipt" : "Discard Changes", role: .destructive) {
-                    dismiss()
-                }
-                Button("Keep Editing", role: .cancel) {
-                }
-            }
-            .alert("Couldn't save", isPresented: errorBinding, actions: {
-                Button("OK", role: .cancel) {
-                }
-            }, message: {
-                Text(errorMessage ?? "")
-            })
+            .padding(.horizontal, Theme.Spacing.screen)
+            .padding(.top, Theme.Spacing.xl)
+            .padding(.bottom, Theme.Spacing.xxl)
         }
-        .tint(Theme.Colors.accentInk)
+        .scrollDismissesKeyboard(.interactively)
+        .themedScreen()
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if focus == nil {
+                saveBar
+            } else {
+                keyboardBar
+            }
+        }
         .interactiveDismissDisabled(hasChanges)
         .presentationBackground(Theme.Colors.background)
         .presentationCornerRadius(Theme.Radius.card)
+        .clayDialog($dialog)
+        .sheet(isPresented: $choosingCategory) {
+            CategoryPickerSheet(selection: $form.category)
+        }
+        .sheet(isPresented: $choosingDate) {
+            DatePickerSheet(date: $form.date)
+        }
         .onAppear {
             if session.isNew && session.record.source == .manual {
                 focus = .merchant
             }
         }
+        .task {
+            #if DEBUG
+            if DemoMode.screen == "category" {
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                choosingCategory = true
+            }
+            #endif
+        }
+    }
+
+    private func close() {
+        focus = nil
+        guard hasChanges else {
+            dismiss()
+            return
+        }
+        dialog = ClayDialog(
+            title: session.isNew ? "Discard this receipt?" : "Discard your changes?",
+            message: session.isNew ? "It hasn't been saved yet." : "The receipt stays as it was.",
+            actions: [
+                ClayDialog.Action(title: session.isNew ? "Discard Receipt" : "Discard Changes", symbol: "trash",
+                                  kind: .destructive) {
+                    dismiss()
+                },
+            ],
+            cancelTitle: "Keep Editing"
+        )
     }
 
     private var saveBar: some View {
-        VStack(spacing: Theme.Spacing.xs) {
-            if !form.isValid {
+        VStack(spacing: Theme.Spacing.s) {
+            if let errorMessage = errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.circle.fill")
+                    .font(Theme.Fonts.caption)
+                    .foregroundStyle(Theme.Colors.danger)
+            } else if !form.isValid {
                 Label("Fix the marked amounts to save.", systemImage: "exclamationmark.circle.fill")
                     .font(Theme.Fonts.caption)
                     .foregroundStyle(Theme.Colors.danger)
@@ -140,7 +147,23 @@ struct ReceiptEditorView: View {
         .padding(.horizontal, Theme.Spacing.screen)
         .padding(.top, Theme.Spacing.m)
         .padding(.bottom, Theme.Spacing.s)
-        .background(Theme.Colors.background.opacity(0.96).ignoresSafeArea())
+        .background(Theme.Colors.background.ignoresSafeArea())
+    }
+
+    /// Shown above the keyboard instead of the system's keyboard toolbar.
+    private var keyboardBar: some View {
+        HStack {
+            Spacer()
+            Button(action: {
+                focus = nil
+            }, label: {
+                Label("Done", systemImage: "keyboard.chevron.compact.down")
+            })
+            .buttonStyle(NeumorphicButtonStyle(prominence: .secondary, fullWidth: false, compact: true))
+        }
+        .padding(.horizontal, Theme.Spacing.screen)
+        .padding(.vertical, Theme.Spacing.s)
+        .background(Theme.Colors.background.ignoresSafeArea())
     }
 
     private func save() {
@@ -150,16 +173,6 @@ struct ReceiptEditorView: View {
         } else {
             dismiss()
         }
-    }
-
-    private var errorBinding: Binding<Bool> {
-        return Binding(get: {
-            errorMessage != nil
-        }, set: { isShowing in
-            if !isShowing {
-                errorMessage = nil
-            }
-        })
     }
 
     // MARK: - Scan banner
@@ -174,15 +187,15 @@ struct ReceiptEditorView: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
                     .accessibilityHidden(true)
             } else {
-                Image(systemName: "sparkles")
-                    .font(Theme.Fonts.title3)
-                    .foregroundStyle(Theme.Colors.accentInk)
-                    .accessibilityHidden(true)
+                IconBadge(symbol: "sparkles", tone: .positive, size: 44)
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Label("Filled in from your scan", systemImage: "sparkles")
-                    .font(Theme.Fonts.headline)
-                    .foregroundStyle(Theme.Colors.text)
+                HStack(spacing: Theme.Spacing.s) {
+                    IconBadge(symbol: "sparkles", tone: .positive, size: 22)
+                    Text("Filled in from your scan")
+                        .font(Theme.Fonts.headline)
+                        .foregroundStyle(Theme.Colors.text)
+                }
                 Text(bannerMessage)
                     .font(Theme.Fonts.callout)
                     .foregroundStyle(Theme.Colors.secondaryText)
@@ -191,7 +204,7 @@ struct ReceiptEditorView: View {
             Spacer(minLength: 0)
         }
         .padding(Theme.Spacing.l)
-        .clayInset(cornerRadius: Theme.Radius.tile)
+        .clayPlate(cornerRadius: Theme.Radius.tile)
         .accessibilityElement(children: .combine)
     }
 
@@ -223,13 +236,10 @@ struct ReceiptEditorView: View {
         HStack(spacing: Theme.Spacing.s) {
             SectionLabel(title: title)
             if let field = field, preview.unreadable.contains(field) {
-                Label("Couldn't read", systemImage: "exclamationmark.triangle.fill")
-                    .font(Theme.Fonts.caption)
-                    .foregroundStyle(Theme.Colors.warning)
+                StatusPill(title: "Couldn't read", symbol: "exclamationmark.triangle.fill", tone: .caution)
             } else if let field = field, preview.autofilled.contains(field) {
-                Image(systemName: "sparkles")
-                    .font(Theme.Fonts.caption)
-                    .foregroundStyle(Theme.Colors.accentInk)
+                IconBadge(symbol: "sparkles", tone: .positive, size: 20)
+                    .accessibilityElement()
                     .accessibilityLabel("Filled in from the scan")
             }
         }
@@ -238,7 +248,7 @@ struct ReceiptEditorView: View {
     // MARK: - Details
 
     private var detailsCard: some View {
-        NeumorphicCard {
+        InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     fieldLabel("Merchant", .merchant)
@@ -249,66 +259,66 @@ struct ReceiptEditorView: View {
                         .insetField()
                         .accessibilityLabel("Merchant")
                 }
-                HStack {
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     fieldLabel("Date", .date)
-                    Spacer()
-                    DatePicker("Date", selection: $form.date, displayedComponents: .date)
-                        .labelsHidden()
-                        .tint(Theme.Colors.accentInk)
+                    Button(action: {
+                        focus = nil
+                        choosingDate = true
+                    }, label: {
+                        HStack {
+                            Image(systemName: "calendar")
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                            Text(DateText.long(form.date))
+                                .foregroundStyle(Theme.Colors.text)
+                            Spacer()
+                        }
+                        .font(Theme.Fonts.body)
+                    })
+                    .buttonStyle(NeumorphicCardButtonStyle(padding: Theme.Spacing.m))
+                    .accessibilityLabel("Date, \(DateText.long(form.date))")
                 }
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     fieldLabel("Category", .category)
-                    categoryChips
-                }
-            }
-        }
-    }
-
-    private var categoryChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Theme.Spacing.s) {
-                ForEach(SpendCategory.allCases) { category in
                     Button(action: {
-                        form.category = category
+                        focus = nil
+                        choosingCategory = true
                     }, label: {
-                        Label(category.title, systemImage: category.symbol)
+                        HStack(spacing: Theme.Spacing.m) {
+                            CategoryBadge(symbol: form.category.symbol, colorIndex: form.category.colorIndex, size: 32)
+                            Text(form.category.title)
+                                .font(Theme.Fonts.body)
+                                .foregroundStyle(Theme.Colors.text)
+                            Spacer()
+                        }
                     })
-                    .buttonStyle(ClayChipStyle(isSelected: form.category == category))
-                    .accessibilityAddTraits(form.category == category ? [.isSelected] : [])
+                    .buttonStyle(NeumorphicCardButtonStyle(padding: Theme.Spacing.m))
+                    .accessibilityLabel("Category, \(form.category.title)")
                 }
             }
-            .padding(.vertical, Theme.Spacing.s)
-            .padding(.horizontal, Theme.Spacing.xxs)
         }
-        .scrollClipDisabled()
     }
 
     // MARK: - Paid by
 
     private var paidByCard: some View {
-        NeumorphicCard {
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+        InfoCard {
+            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 SectionLabel(title: "Paid by")
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Theme.Spacing.s) {
-                        ForEach(people) { person in
-                            Button(action: {
-                                form.paidBy = person.id
-                            }, label: {
-                                HStack(spacing: Theme.Spacing.xs) {
-                                    AvatarView(person: person, size: 26)
-                                    Text(people.displayName(person.id))
-                                }
-                            })
-                            .buttonStyle(ClayChipStyle(isSelected: form.paidBy == person.id))
-                            .accessibilityLabel("Paid by \(people.displayName(person.id))")
-                            .accessibilityAddTraits(form.paidBy == person.id ? [.isSelected] : [])
-                        }
+                FlowLayout {
+                    ForEach(people) { person in
+                        Button(action: {
+                            form.paidBy = person.id
+                        }, label: {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                AvatarView(person: person, size: 26)
+                                Text(people.displayName(person.id))
+                            }
+                        })
+                        .buttonStyle(ClayChipStyle(isSelected: form.paidBy == person.id))
+                        .accessibilityLabel("Paid by \(people.displayName(person.id))")
+                        .accessibilityAddTraits(form.paidBy == person.id ? [.isSelected] : [])
                     }
-                    .padding(.vertical, Theme.Spacing.s)
-                    .padding(.horizontal, Theme.Spacing.xxs)
                 }
-                .scrollClipDisabled()
             }
         }
     }
@@ -316,7 +326,7 @@ struct ReceiptEditorView: View {
     // MARK: - Items
 
     private var itemsCard: some View {
-        NeumorphicCard {
+        InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 HStack {
                     fieldLabel("Items", .items)
@@ -373,7 +383,7 @@ struct ReceiptEditorView: View {
     // MARK: - Amounts
 
     private var amountsCard: some View {
-        NeumorphicCard {
+        InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 amountField(title: "Tax", field: .tax, text: $form.taxText, focusValue: .tax,
                             invalid: form.invalidFields.contains(.tax))
@@ -419,7 +429,7 @@ struct ReceiptEditorView: View {
                     .multilineTextAlignment(.trailing)
                     .focused($focus, equals: focusValue)
                     .insetField()
-                    .frame(width: 150)
+                    .frame(width: 140)
                     .overlay {
                         if invalid {
                             RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
@@ -447,13 +457,13 @@ struct ReceiptEditorView: View {
                     ClaySegmentedPicker<Bool>.Option(value: true, title: "%", symbol: nil,
                                                      accessibilityName: "Tip as a percentage"),
                 ])
-                .frame(width: 112)
+                .frame(width: 108)
                 TextField(form.tipIsPercent ? "15" : "0.00", text: $form.tipText)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .focused($focus, equals: .tip)
                     .insetField()
-                    .frame(width: 96)
+                    .frame(width: 92)
                     .overlay {
                         if form.invalidFields.contains(.tip) {
                             RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
@@ -479,11 +489,13 @@ struct ReceiptEditorView: View {
     private func mismatchNote(_ mismatch: Decimal) -> some View {
         let computed = preview.computedTotal
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Label("Items + tax + tip come to \(Money.string(computed)). The \(Money.string(abs(mismatch))) difference is shared like tax.",
-                  systemImage: "exclamationmark.triangle.fill")
-                .font(Theme.Fonts.callout)
-                .foregroundStyle(Theme.Colors.warning)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: Theme.Spacing.s) {
+                IconBadge(symbol: "exclamationmark", tone: .caution, size: 22)
+                Text("Items + tax + tip come to \(Money.string(computed)). The \(Money.string(abs(mismatch))) difference is shared like tax.")
+                    .font(Theme.Fonts.callout)
+                    .foregroundStyle(Theme.Colors.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Button(action: {
                 form.totalText = MoneyInput.editText(computed)
             }, label: {
@@ -491,13 +503,17 @@ struct ReceiptEditorView: View {
             })
             .buttonStyle(NeumorphicButtonStyle(prominence: .secondary, fullWidth: false, compact: true))
         }
+        .padding(Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous)
+            .fill(Theme.Colors.cautionFill.opacity(0.35)))
     }
 
     // MARK: - Split preview
 
     private var splitCard: some View {
         let split = SplitCalculator.split(preview, members: people.map { person in person.id })
-        return NeumorphicCard {
+        return InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 SectionLabel(title: "Split")
                 ForEach(split.shares, id: \.personID) { share in
@@ -538,7 +554,7 @@ struct ItemEditorRow: View {
                     .multilineTextAlignment(.trailing)
                     .focused(focus, equals: .itemPrice(item.id))
                     .insetField()
-                    .frame(width: 104)
+                    .frame(width: 100)
                     .overlay {
                         if isPriceInvalid {
                             RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
@@ -549,7 +565,7 @@ struct ItemEditorRow: View {
                 Button(action: onRemove) {
                     Image(systemName: "minus")
                 }
-                .buttonStyle(NeumorphicIconButtonStyle(tint: Theme.Colors.danger))
+                .buttonStyle(NeumorphicIconButtonStyle(prominence: .destructive))
                 .accessibilityLabel("Remove \(item.name.isEmpty ? "item" : item.name)")
             }
             if item.isUncertain {
@@ -566,38 +582,91 @@ struct ItemEditorRow: View {
                 assigneeChips
             }
         }
+        .padding(.bottom, Theme.Spacing.xs)
     }
 
     private var assigneeChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Theme.Spacing.s) {
+        FlowLayout {
+            Button(action: {
+                item.assignees = []
+            }, label: {
+                Label("Everyone", systemImage: "person.3.fill")
+            })
+            .buttonStyle(ClayChipStyle(isSelected: item.assignees.isEmpty))
+            .accessibilityLabel("Shared by everyone")
+            .accessibilityAddTraits(item.assignees.isEmpty ? [.isSelected] : [])
+            ForEach(people) { person in
+                let isSelected = item.assignees.contains(person.id)
                 Button(action: {
-                    item.assignees = []
+                    item.assignees = ReceiptForm.toggled(item.assignees, person: person.id,
+                                                         members: people.map { member in member.id })
                 }, label: {
-                    Label("Everyone", systemImage: "person.3.fill")
+                    HStack(spacing: Theme.Spacing.xs) {
+                        AvatarView(person: person, size: 24)
+                        Text(people.displayName(person.id))
+                    }
                 })
-                .buttonStyle(ClayChipStyle(isSelected: item.assignees.isEmpty))
-                .accessibilityLabel("Shared by everyone")
-                .accessibilityAddTraits(item.assignees.isEmpty ? [.isSelected] : [])
-                ForEach(people) { person in
-                    let isSelected = item.assignees.contains(person.id)
-                    Button(action: {
-                        item.assignees = ReceiptForm.toggled(item.assignees, person: person.id,
-                                                             members: people.map { member in member.id })
-                    }, label: {
-                        HStack(spacing: Theme.Spacing.xs) {
-                            AvatarView(person: person, size: 24)
-                            Text(people.displayName(person.id))
-                        }
-                    })
-                    .buttonStyle(ClayChipStyle(isSelected: isSelected))
-                    .accessibilityLabel("Shared by \(people.displayName(person.id))")
-                    .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                .buttonStyle(ClayChipStyle(isSelected: isSelected))
+                .accessibilityLabel("Shared by \(people.displayName(person.id))")
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+            }
+        }
+        .padding(.vertical, Theme.Spacing.xs)
+    }
+}
+
+/// All spending categories as a grid of tiles.
+struct CategoryPickerSheet: View {
+    @Binding var selection: SpendCategory
+
+    @Environment(\.dismiss) private var dismiss
+
+    private let columns = [GridItem(.adaptive(minimum: 96), spacing: Theme.Spacing.m)]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                SheetHeader(title: "Category", onClose: {
+                    dismiss()
+                })
+                LazyVGrid(columns: columns, spacing: Theme.Spacing.m) {
+                    ForEach(SpendCategory.allCases) { category in
+                        tile(category)
+                    }
                 }
             }
-            .padding(.vertical, Theme.Spacing.xs + 2)
-            .padding(.horizontal, Theme.Spacing.xxs)
+            .padding(.horizontal, Theme.Spacing.screen)
+            .padding(.vertical, Theme.Spacing.xl)
         }
-        .scrollClipDisabled()
+        .themedScreen()
+        .presentationDetents([.medium, .large])
+        .claySheet()
+    }
+
+    private func tile(_ category: SpendCategory) -> some View {
+        let isSelected = category == selection
+        return Button(action: {
+            selection = category
+            Haptics.selection()
+            dismiss()
+        }, label: {
+            VStack(spacing: Theme.Spacing.s) {
+                CategoryBadge(symbol: category.symbol, colorIndex: category.colorIndex, size: 44)
+                Text(category.title)
+                    .font(Theme.Fonts.caption)
+                    .foregroundStyle(isSelected ? Theme.Colors.onAccent : Theme.Colors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, minHeight: 92)
+            .background {
+                ClayBackground(shape: RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous),
+                               style: isSelected ? .accent : .raised, elevation: Theme.Elevations.small)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
+        })
+        .buttonStyle(.plain)
+        .accessibilityLabel(category.title)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }

@@ -45,7 +45,7 @@ enum ReceiptSearch {
     }
 
     static func searchableText(for receipt: ReceiptRecord) -> String {
-        var parts: [String] = [receipt.merchant, receipt.category.title]
+        var parts: [String] = [receipt.merchant, receipt.category.title, receipt.category.rawValue]
         parts.append(contentsOf: receipt.items.map { item in item.name })
         parts.append(contentsOf: dateStrings(receipt.date))
         parts.append(contentsOf: amountStrings(receipt.effectiveTotal))

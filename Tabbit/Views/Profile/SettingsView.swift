@@ -45,18 +45,14 @@ struct SettingsView: View {
                     Button(action: {
                         showsWhatsNew = true
                     }, label: {
-                        HStack {
-                            Label("What's New", systemImage: "sparkles")
+                        HStack(spacing: Theme.Spacing.m) {
+                            IconBadge(symbol: "sparkles", tone: .positive, size: 30)
+                            Text("What's New")
+                                .font(Theme.Fonts.body)
                                 .foregroundStyle(Theme.Colors.text)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundStyle(Theme.Colors.secondaryText)
                         }
-                        .font(Theme.Fonts.body)
-                        .frame(minHeight: Theme.Size.tapTarget)
-                        .contentShape(Rectangle())
                     })
-                    .buttonStyle(.plain)
+                    .buttonStyle(NeumorphicCardButtonStyle(padding: Theme.Spacing.m))
                     VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                         Label("Scanning, reading and splitting happen on this iPhone.", systemImage: "iphone")
                         Label("Receipts and photos are stored only here, encrypted while the phone is locked, and left out of iCloud Backup.",
@@ -78,8 +74,7 @@ struct SettingsView: View {
             .padding(.vertical, Theme.Spacing.l)
         }
         .themedScreen()
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
+        .clayNavigation("Settings")
         .onAppear {
             usage = store.storageUsage()
         }
@@ -95,7 +90,7 @@ struct SettingsView: View {
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             SectionLabel(title: title)
-            NeumorphicCard {
+            InfoCard {
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     content()
                 }
@@ -140,7 +135,7 @@ struct SettingsView: View {
             .accessibilityElement(children: .combine)
         } else {
             ProgressView()
-                .tint(Theme.Colors.accentInk)
+                .tint(Theme.Colors.text)
         }
     }
 
@@ -170,7 +165,7 @@ struct WhatsNewView: View {
                     dismiss()
                 })
                 ForEach(Changelog.entries) { entry in
-                    NeumorphicCard {
+                    InfoCard {
                         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                             HStack(alignment: .firstTextBaseline) {
                                 Text(entry.title)
@@ -184,11 +179,7 @@ struct WhatsNewView: View {
                             ForEach(entry.highlights.indices, id: \.self) { index in
                                 let highlight = entry.highlights[index]
                                 HStack(alignment: .top, spacing: Theme.Spacing.m) {
-                                    Image(systemName: highlight.symbol)
-                                        .font(Theme.Fonts.headline)
-                                        .foregroundStyle(Theme.Colors.accentInk)
-                                        .frame(width: 28)
-                                        .accessibilityHidden(true)
+                                    IconBadge(symbol: highlight.symbol, tone: .positive, size: 30)
                                     Text(highlight.text)
                                         .font(Theme.Fonts.callout)
                                         .foregroundStyle(Theme.Colors.text)

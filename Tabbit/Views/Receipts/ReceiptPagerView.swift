@@ -13,7 +13,7 @@ struct ReceiptPagerView: View {
 
     @State private var selection: UUID
     @State private var moving: ReceiptRecord?
-    @State private var deleting: ReceiptRecord?
+    @State private var dialog: ClayDialog?
     @State private var shareFile: ShareFile?
     @State private var toast: String?
 
@@ -41,18 +41,23 @@ struct ReceiptPagerView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .themedScreen()
-        .navigationTitle(positionText(in: list))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                if let receipt = current {
+        .clayNavigation(positionText(in: list), titleInset: 116) {
+            if let receipt = current {
+                HStack(spacing: Theme.Spacing.s) {
                     Button(action: {
                         flow.edit(receipt)
                     }, label: {
                         Image(systemName: "pencil")
                     })
+                    .buttonStyle(NeumorphicIconButtonStyle())
                     .accessibilityLabel("Edit receipt")
-                    moreMenu(receipt)
+                    Button(action: {
+                        dialog = moreDialog(for: receipt)
+                    }, label: {
+                        Image(systemName: "ellipsis")
+                    })
+                    .buttonStyle(NeumorphicIconButtonStyle())
+                    .accessibilityLabel("More")
                 }
             }
         }
@@ -67,6 +72,7 @@ struct ReceiptPagerView: View {
         }
         .sensoryFeedback(.selection, trigger: selection)
         .toast($toast)
+        .clayDialog($dialog)
         .sheet(item: $moving) { receipt in
             MoveReceiptSheet(receiptID: receipt.id, onMoved: { name in
                 toast = "Moved to \(name)"
@@ -77,43 +83,26 @@ struct ReceiptPagerView: View {
             ActivityView(items: [file.url])
                 .presentationDetents([.medium, .large])
         }
-        .confirmationDialog("Delete this receipt?", isPresented: deletingBinding, titleVisibility: .visible,
-                            presenting: deleting, actions: { receipt in
-            Button("Delete Receipt", role: .destructive) {
-                store.delete(receipt.id)
-            }
-            Button("Cancel", role: .cancel) {
-            }
-        }, message: { receipt in
-            Text("“\(receipt.displayTitle)” and its photos will be deleted from this iPhone.")
-        })
     }
 
-    private func moreMenu(_ receipt: ReceiptRecord) -> some View {
-        Menu {
-            Button(action: {
+    /// Move, export and delete, as a clay sheet instead of a system menu.
+    private func moreDialog(for receipt: ReceiptRecord) -> ClayDialog {
+        var actions: [ClayDialog.Action] = [
+            ClayDialog.Action(title: "Move to…", symbol: "folder") {
                 moving = receipt
-            }, label: {
-                Label("Move to…", systemImage: "folder")
+            },
+        ]
+        if receipt.scan != nil {
+            actions.append(ClayDialog.Action(title: "Export Scan Data", symbol: "square.and.arrow.up") {
+                if let url = ScanProcessor.writeExport(for: receipt) {
+                    shareFile = ShareFile(url: url)
+                }
             })
-            if receipt.scan != nil {
-                Button(action: {
-                    if let url = ScanProcessor.writeExport(for: receipt) {
-                        shareFile = ShareFile(url: url)
-                    }
-                }, label: {
-                    Label("Export Scan Data", systemImage: "square.and.arrow.up")
-                })
-            }
-            Button(role: .destructive, action: {
-                deleting = receipt
-            }, label: {
-                Label("Delete", systemImage: "trash")
-            })
-        } label: {
-            Image(systemName: "ellipsis.circle")
         }
-        .accessibilityLabel("More")
+        actions.append(ClayDialog.Action(title: "Delete Receipt", symbol: "trash", kind: .destructive) {
+            dialog = ReceiptActions.deleteDialog(for: receipt, store: store)
+        })
+        return ClayDialog(title: receipt.displayTitle, message: nil, actions: actions)
     }
 
     private func positionText(in list: [ReceiptRecord]) -> String {
@@ -121,16 +110,6 @@ struct ReceiptPagerView: View {
             return "Receipt"
         }
         return "\(index + 1) of \(list.count)"
-    }
-
-    private var deletingBinding: Binding<Bool> {
-        return Binding(get: {
-            deleting != nil
-        }, set: { isShowing in
-            if !isShowing {
-                deleting = nil
-            }
-        })
     }
 }
 
@@ -152,7 +131,7 @@ struct ReceiptDetailPage: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Theme.Spacing.xl) {
+            VStack(spacing: Theme.Spacing.l) {
                 hero
                 if isShared {
                     owesCard
@@ -163,7 +142,7 @@ struct ReceiptDetailPage: View {
                 }
             }
             .padding(.horizontal, Theme.Spacing.screen)
-            .padding(.top, Theme.Spacing.l)
+            .padding(.top, Theme.Spacing.s)
             .padding(.bottom, Theme.Spacing.xxl)
         }
         .fullScreenCover(isPresented: $showsPhotos) {
@@ -175,7 +154,7 @@ struct ReceiptDetailPage: View {
     // MARK: - Hero
 
     private var hero: some View {
-        NeumorphicCard {
+        InfoCard {
             HStack(alignment: .top, spacing: Theme.Spacing.l) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     HStack(spacing: Theme.Spacing.m) {
@@ -212,6 +191,7 @@ struct ReceiptDetailPage: View {
         return name == "You" ? "you" : name
     }
 
+    /// The photo is a raised clay tile: it opens full screen.
     private var photoButton: some View {
         Button(action: {
             showsPhotos = true
@@ -221,15 +201,19 @@ struct ReceiptDetailPage: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 72, height: 96)
+                        .frame(width: 64, height: 86)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
                 } else {
                     Image(systemName: "photo.badge.plus")
                         .font(Theme.Fonts.title3)
-                        .foregroundStyle(Theme.Colors.accentInk)
-                        .frame(width: 72, height: 96)
-                        .clayInset(cornerRadius: Theme.Radius.small)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .frame(width: 64, height: 86)
                 }
+            }
+            .padding(Theme.Spacing.xs)
+            .background {
+                ClayBackground(shape: RoundedRectangle(cornerRadius: Theme.Radius.small + 4, style: .continuous),
+                               style: .raised, elevation: Theme.Elevations.small)
             }
         })
         .buttonStyle(.plain)
@@ -240,61 +224,51 @@ struct ReceiptDetailPage: View {
 
     private var owesCard: some View {
         let split = store.split(receipt)
-        return NeumorphicCard {
+        return InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 SectionLabel(title: "Who owes what")
                 ForEach(split.shares, id: \.personID) { share in
-                    shareRow(share)
+                    Expandable(isExpanded: expansionBinding(share.personID)) {
+                        shareHeadline(share)
+                    } content: {
+                        ShareBreakdown(share: share)
+                            .padding(.top, Theme.Spacing.s)
+                    }
                 }
             }
         }
     }
 
-    private func shareRow(_ share: PersonShare) -> some View {
-        let isOpen = expanded.contains(share.personID)
-        let name = people.displayName(share.personID)
-        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Button(action: {
-                withAnimation(Theme.Motion.standard) {
-                    if isOpen {
-                        expanded.remove(share.personID)
-                    } else {
-                        expanded.insert(share.personID)
-                    }
-                }
-            }, label: {
-                HStack(spacing: Theme.Spacing.m) {
-                    if let person = people.person(share.personID) {
-                        AvatarView(person: person, size: 36)
-                    }
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                        Text(name)
-                            .font(Theme.Fonts.body)
-                            .foregroundStyle(Theme.Colors.text)
-                        Text(statusText(for: share))
-                            .font(Theme.Fonts.caption)
-                            .foregroundStyle(share.personID == receipt.paidBy
-                                             ? Theme.Colors.accentInk : Theme.Colors.secondaryText)
-                    }
-                    Spacer()
-                    MoneyText(amount: share.total, font: Theme.Fonts.money)
-                    Image(systemName: "chevron.down")
-                        .font(Theme.Fonts.caption.weight(.bold))
-                        .foregroundStyle(Theme.Colors.secondaryText)
-                        .rotationEffect(.degrees(isOpen ? 180 : 0))
-                        .accessibilityHidden(true)
-                }
-                .frame(minHeight: Theme.Size.tapTarget)
-                .contentShape(Rectangle())
-            })
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityHint(isOpen ? "Hides the breakdown" : "Shows the breakdown")
-
+    private func expansionBinding(_ id: UUID) -> Binding<Bool> {
+        return Binding(get: {
+            expanded.contains(id)
+        }, set: { isOpen in
             if isOpen {
-                ShareBreakdown(share: share)
+                expanded.insert(id)
+            } else {
+                expanded.remove(id)
             }
+        })
+    }
+
+    private func shareHeadline(_ share: PersonShare) -> some View {
+        HStack(spacing: Theme.Spacing.m) {
+            if let person = people.person(share.personID) {
+                AvatarView(person: person, size: 36)
+            }
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                Text(people.displayName(share.personID))
+                    .font(Theme.Fonts.body)
+                    .foregroundStyle(Theme.Colors.text)
+                Text(statusText(for: share))
+                    .font(Theme.Fonts.caption)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+            Spacer()
+            MoneyText(amount: share.total, font: Theme.Fonts.money)
         }
+        .frame(minHeight: Theme.Size.tapTarget)
+        .accessibilityElement(children: .combine)
     }
 
     private func statusText(for share: PersonShare) -> String {
@@ -310,7 +284,7 @@ struct ReceiptDetailPage: View {
     // MARK: - Items
 
     private var itemsCard: some View {
-        NeumorphicCard {
+        InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 SectionLabel(title: receipt.items.isEmpty ? "Amounts" : "Items")
                 ForEach(receipt.items) { item in
@@ -355,10 +329,13 @@ struct ReceiptDetailPage: View {
                 .padding(Theme.Spacing.m)
                 .clayInset(cornerRadius: Theme.Radius.tile)
                 if let mismatch = receipt.totalMismatch {
-                    Label(mismatchText(mismatch), systemImage: "exclamationmark.triangle.fill")
-                        .font(Theme.Fonts.caption)
-                        .foregroundStyle(Theme.Colors.warning)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .top, spacing: Theme.Spacing.s) {
+                        IconBadge(symbol: "exclamationmark", tone: .caution, size: 22)
+                        Text(mismatchText(mismatch))
+                            .font(Theme.Fonts.caption)
+                            .foregroundStyle(Theme.Colors.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
@@ -388,11 +365,12 @@ struct ReceiptDetailPage: View {
     // MARK: - Notes
 
     private func notesCard(_ notes: [String]) -> some View {
-        NeumorphicInsetCard {
+        InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                Label("From the scan", systemImage: "text.viewfinder")
-                    .font(Theme.Fonts.caption)
-                    .foregroundStyle(Theme.Colors.secondaryText)
+                HStack(spacing: Theme.Spacing.s) {
+                    IconBadge(symbol: "text.viewfinder", tone: .neutral, size: 24)
+                    SectionLabel(title: "From the scan")
+                }
                 ForEach(notes, id: \.self) { note in
                     Text(note)
                         .font(Theme.Fonts.callout)

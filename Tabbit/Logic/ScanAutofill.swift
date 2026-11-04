@@ -74,31 +74,84 @@ enum ScanAutofill {
     }
 }
 
-/// Guesses a spending category from the merchant name and items.
+/// Guesses a spending category from the merchant name, then from the items.
+///
+/// Keywords of 4 letters or fewer must be whole words ("inn" mustn't match "dinner",
+/// "tea" mustn't match "steak"); longer ones may appear inside words ("bakery" in
+/// "bakeryhouse"). Rules are checked in order, so specific ones come first.
 enum CategoryGuesser {
     private static let rules: [(SpendCategory, [String])] = [
-        (.food, ["cafe", "café", "coffee", "espresso", "bakery", "restaurant", "grill", "bistro", "pizza", "burger",
-                 "sushi", "taco", "kitchen", "diner", "bar", "pub", "brew", "tea", "latte", "noodle", "deli"]),
+        (.coffee, ["coffee", "espresso", "starbucks", "cafe", "café", "latte", "roastery", "roasters", "teahouse",
+                   "tea", "dunkin", "costa", "kaffee", "cafeteria"]),
+        (.food, ["restaurant", "grill", "bistro", "pizza", "pizzeria", "burger", "sushi", "taco", "kitchen", "diner",
+                 "noodle", "deli", "bakery", "bäckerei", "boulangerie", "pastelaria", "trattoria", "osteria", "ramen",
+                 "thai", "curry", "bbq", "cantina", "eatery", "brasserie", "taverna", "mcdonald", "chipotle", "kfc",
+                 "bagel", "donut", "doughnut", "kebab", "falafel", "steakhouse", "dumpling", "pho", "takeaway"]),
+        (.drinks, ["bar", "pub", "brewery", "brewing", "tavern", "wine", "cocktail", "beer", "liquor", "spirits",
+                   "taproom", "lounge", "biergarten"]),
         (.groceries, ["market", "grocery", "grocer", "supermarket", "foods", "mart", "trader joe", "whole foods",
-                      "aldi", "kroger", "safeway", "costco", "produce"]),
-        (.transport, ["uber", "lyft", "taxi", "cab", "fuel", "gas", "petrol", "shell", "chevron", "parking", "transit",
-                      "metro", "rail", "airline", "airways", "toll"]),
-        (.lodging, ["hotel", "inn", "motel", "hostel", "resort", "lodge", "airbnb", "suites"]),
-        (.entertainment, ["cinema", "theater", "theatre", "movie", "museum", "tickets", "concert", "bowling", "arcade"]),
-        (.health, ["pharmacy", "drug", "clinic", "dental", "health", "cvs", "walgreens"]),
-        (.utilities, ["electric", "water", "utility", "internet", "phone", "mobile", "power"]),
-        (.shopping, ["store", "shop", "outlet", "boutique", "hardware", "target", "walmart", "mall", "books"]),
+                      "aldi", "lidl", "kroger", "safeway", "costco", "produce", "tesco", "sainsbury", "carrefour",
+                      "rewe", "edeka", "mercado", "albert heijn", "spar", "coop", "publix", "wegmans", "mercadona"]),
+        (.fuel, ["fuel", "gas station", "petrol", "shell", "chevron", "exxon", "esso", "texaco", "arco", "valero",
+                 "tankstelle", "diesel", "unleaded"]),
+        (.transport, ["uber", "lyft", "taxi", "cab", "parking", "transit", "metro", "rail", "railway", "train", "bus",
+                      "toll", "tram", "ferry", "subway", "bahn", "scooter", "car rental", "rental car"]),
+        (.travel, ["airline", "airlines", "airways", "airport", "flight", "expedia", "lufthansa", "ryanair",
+                   "easyjet", "travel", "tours", "excursion"]),
+        (.lodging, ["hotel", "inn", "motel", "hostel", "resort", "lodge", "airbnb", "suites", "guesthouse", "b&b"]),
+        (.rent, ["rent", "landlord", "lease", "mortgage", "apartment", "housing", "property management"]),
+        (.utilities, ["electric", "electricity", "water", "utility", "utilities", "internet", "broadband", "energy",
+                      "power", "telecom", "verizon", "vodafone", "comcast", "phone bill", "mobile"]),
+        (.subscriptions, ["netflix", "spotify", "icloud", "hulu", "disney", "youtube", "patreon", "adobe",
+                          "subscription", "membership", "apple.com"]),
+        (.entertainment, ["cinema", "theater", "theatre", "movie", "museum", "tickets", "ticket", "concert",
+                          "bowling", "arcade", "gallery", "zoo", "park", "festival", "karaoke", "escape room"]),
+        (.health, ["pharmacy", "drug", "drugstore", "clinic", "dental", "dentist", "health", "cvs", "walgreens",
+                   "doctor", "hospital", "optician", "apotheke", "farmacia", "medical"]),
+        (.personalCare, ["salon", "barber", "spa", "beauty", "cosmetic", "cosmetics", "nail", "nails", "sephora",
+                         "hair", "massage"]),
+        (.fitness, ["gym", "fitness", "yoga", "pilates", "climbing", "swim", "crossfit", "sports", "golf"]),
+        (.education, ["school", "university", "college", "tuition", "course", "academy", "udemy", "coursera",
+                      "textbook"]),
+        (.pets, ["pet", "pets", "vet", "veterinary", "petco", "petsmart", "animal"]),
+        (.kids, ["toy", "toys", "kids", "baby", "children", "daycare", "nursery"]),
+        (.gifts, ["gift", "gifts", "florist", "flowers", "charity", "donation"]),
+        (.clothing, ["clothing", "apparel", "fashion", "zara", "uniqlo", "shoes", "boutique", "outfitters", "nike",
+                     "adidas", "gap", "h&m"]),
+        (.electronics, ["electronics", "apple store", "best buy", "bestbuy", "computer", "mediamarkt", "currys",
+                        "camera"]),
+        (.household, ["hardware", "home depot", "ikea", "lowe's", "garden", "furniture", "homeware", "homewares",
+                      "bed bath", "diy"]),
+        (.shopping, ["store", "shop", "outlet", "mall", "target", "walmart", "amazon", "department", "books"]),
     ]
 
     static func guess(merchant: String, items: [String]) -> SpendCategory {
-        let merchantText = merchant.lowercased()
-        for (category, keywords) in rules where keywords.contains(where: { keyword in merchantText.contains(keyword) }) {
+        if let category = match(merchant) {
             return category
         }
-        let itemText = items.joined(separator: " ").lowercased()
-        for (category, keywords) in rules where keywords.contains(where: { keyword in itemText.contains(keyword) }) {
-            return category
+        return match(items.joined(separator: " ")) ?? .other
+    }
+
+    private static func match(_ text: String) -> SpendCategory? {
+        let lowered = text.lowercased()
+        guard !lowered.isEmpty else {
+            return nil
         }
-        return .other
+        let words = Set(lowered.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { word in
+            !word.isEmpty
+        })
+        for (category, keywords) in rules {
+            for keyword in keywords where matches(keyword, lowered: lowered, words: words) {
+                return category
+            }
+        }
+        return nil
+    }
+
+    private static func matches(_ keyword: String, lowered: String, words: Set<String>) -> Bool {
+        if keyword.count <= 4 && !keyword.contains(" ") && !keyword.contains("&") && !keyword.contains(".") {
+            return words.contains(keyword) || words.contains(keyword + "s")
+        }
+        return lowered.contains(keyword)
     }
 }

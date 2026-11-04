@@ -1,28 +1,9 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Lists of clay cards
+// MARK: - Screen headers
 
 extension View {
-    /// A List row that shows only its clay card: no separator, clear background,
-    /// screen-side margins and room for the card's shadow.
-    func clayRow(top: CGFloat = Theme.Spacing.s, bottom: CGFloat = Theme.Spacing.s) -> some View {
-        self
-            .listRowInsets(EdgeInsets(top: top, leading: Theme.Spacing.screen,
-                                      bottom: bottom, trailing: Theme.Spacing.screen))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-    }
-
-    /// A plain List on the theme background (List gives us swipe actions).
-    func clayList() -> some View {
-        self
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .environment(\.defaultMinListRowHeight, 0)
-            .background(Theme.Colors.background.ignoresSafeArea())
-    }
-
     /// Keeps the last rows of a tab's first screen clear of the floating tab bar.
     func tabBarClearance() -> some View {
         safeAreaInset(edge: .bottom, spacing: 0) {
@@ -31,7 +12,7 @@ extension View {
     }
 }
 
-/// A screen's large title with an optional subtitle and trailing buttons.
+/// A tab's large title with an optional subtitle and trailing buttons.
 struct ScreenHeader<Trailing: View>: View {
     let title: String
     var subtitle: String?
@@ -69,20 +50,78 @@ extension ScreenHeader where Trailing == EmptyView {
     }
 }
 
-/// A round clay label for Menus (which can't take our button styles).
-struct ClayIconLabel: View {
-    let symbol: String
-    var size: CGFloat = Theme.Size.tapTarget
+/// The top bar of a pushed screen: a clay back button, the title, and clay buttons
+/// on the right. Replaces the system navigation bar (and its glass buttons).
+struct NavHeader<Trailing: View>: View {
+    let title: String
+    var titleInset: CGFloat = 64
+    let onBack: () -> Void
+    let trailing: Trailing
 
     var body: some View {
-        Image(systemName: symbol)
-            .font(Theme.Fonts.headline)
-            .foregroundStyle(Theme.Colors.text)
-            .frame(width: size, height: size)
-            .background {
-                ClayBackground(shape: Circle(), style: .raised, elevation: Theme.Elevations.control)
+        ZStack {
+            Text(title)
+                .font(Theme.Fonts.headline)
+                .foregroundStyle(Theme.Colors.text)
+                .lineLimit(1)
+                .padding(.horizontal, titleInset)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: Theme.Spacing.s) {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left")
+                }
+                .buttonStyle(NeumorphicIconButtonStyle())
+                .accessibilityLabel("Back")
+                Spacer(minLength: 0)
+                trailing
             }
-            .contentShape(Circle())
+        }
+        .padding(.horizontal, Theme.Spacing.screen)
+        .padding(.vertical, Theme.Spacing.s)
+        .frame(minHeight: Theme.Size.headerHeight)
+        .background(Theme.Colors.background.ignoresSafeArea(edges: .top))
+    }
+}
+
+private struct ClayNavigationModifier<Trailing: View>: ViewModifier {
+    let title: String
+    let titleInset: CGFloat
+    let trailing: Trailing
+
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        content
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                NavHeader(title: title, titleInset: titleInset, onBack: {
+                    dismiss()
+                }, trailing: trailing)
+            }
+    }
+}
+
+extension View {
+    /// Gives a pushed screen the clay header (back button, title, trailing buttons).
+    func clayNavigation<Trailing: View>(_ title: String, titleInset: CGFloat = 64,
+                                        @ViewBuilder trailing: () -> Trailing) -> some View {
+        modifier(ClayNavigationModifier(title: title, titleInset: titleInset, trailing: trailing()))
+    }
+
+    func clayNavigation(_ title: String) -> some View {
+        clayNavigation(title, trailing: { EmptyView() })
+    }
+}
+
+/// Keeps the edge swipe-back gesture working with the system navigation bar hidden.
+extension UINavigationController: UIGestureRecognizerDelegate {
+    override open func viewDidLoad() {
+        super.viewDidLoad()
+        interactivePopGestureRecognizer?.delegate = self
+    }
+
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        return viewControllers.count > 1
     }
 }
 
@@ -102,20 +141,20 @@ struct FloatingAddButton: View {
 
 // MARK: - Money and balances
 
-/// "You're owed $12.00", "You owe $8.00" or "Settled up", always with an icon.
-struct BalanceChip: View {
+/// "You're owed $12.00" (mint), "You owe $8.00" (amber) or "Settled up" (grey), always with an icon.
+struct BalancePill: View {
     /// My balance in cents: positive means others owe me.
     let cents: Int
 
     var body: some View {
         if cents > 0 {
-            StatusChip(title: "You're owed \(Money.string(Money.fromCents(cents)))",
-                       symbol: "arrow.down.left.circle.fill", tint: Theme.Colors.accentInk)
+            StatusPill(title: "You're owed \(Money.string(Money.fromCents(cents)))",
+                       symbol: "arrow.down.left", tone: .positive)
         } else if cents < 0 {
-            StatusChip(title: "You owe \(Money.string(Money.fromCents(-cents)))",
-                       symbol: "arrow.up.right.circle.fill", tint: Theme.Colors.warning)
+            StatusPill(title: "You owe \(Money.string(Money.fromCents(-cents)))",
+                       symbol: "arrow.up.right", tone: .caution)
         } else {
-            StatusChip(title: "Settled up", symbol: "checkmark.circle.fill", tint: Theme.Colors.secondaryText)
+            StatusPill(title: "Settled up", symbol: "checkmark", tone: .neutral)
         }
     }
 }
@@ -158,6 +197,38 @@ enum DateText {
     }
 }
 
+/// Pick a day: a wheel in a clay sheet, instead of the system's compact date button.
+struct DatePickerSheet: View {
+    @Binding var date: Date
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: Theme.Spacing.l) {
+            SheetHeader(title: "Date", onClose: {
+                dismiss()
+            })
+            DatePicker("Date", selection: $date, displayedComponents: .date)
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+            Button(action: {
+                dismiss()
+            }, label: {
+                Label("Done", systemImage: "checkmark")
+            })
+            .buttonStyle(NeumorphicButtonStyle(prominence: .primary))
+        }
+        .padding(.horizontal, Theme.Spacing.screen)
+        .padding(.top, Theme.Spacing.xl)
+        .padding(.bottom, Theme.Spacing.l)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .themedScreen()
+        .presentationDetents([.height(440), .large])
+        .claySheet()
+    }
+}
+
 // MARK: - Toast
 
 /// A short message that floats in and fades away ("Copied", "Saved to Photos").
@@ -169,21 +240,25 @@ struct ToastModifier: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay(alignment: .top) {
             if let message = message {
-                Label(message, systemImage: "checkmark.circle.fill")
-                    .font(Theme.Fonts.subheadline.weight(.bold))
-                    .foregroundStyle(Theme.Colors.text)
-                    .padding(.horizontal, Theme.Spacing.l)
-                    .frame(minHeight: Theme.Size.compactButtonHeight)
-                    .clayRaised(cornerRadius: 22, elevation: Theme.Elevations.floating)
-                    .padding(.top, Theme.Spacing.s)
-                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
-                    .task(id: message) {
-                        UIAccessibility.post(notification: .announcement, argument: message)
-                        try? await Task.sleep(nanoseconds: 1_800_000_000)
-                        withAnimation(Theme.Motion.standard) {
-                            self.message = nil
-                        }
+                HStack(spacing: Theme.Spacing.s) {
+                    IconBadge(symbol: "checkmark", tone: .positive, size: 26)
+                    Text(message)
+                        .font(Theme.Fonts.subheadline.weight(.bold))
+                        .foregroundStyle(Theme.Colors.text)
+                }
+                .padding(.leading, Theme.Spacing.s)
+                .padding(.trailing, Theme.Spacing.l)
+                .frame(minHeight: Theme.Size.compactButtonHeight)
+                .clayRaised(cornerRadius: 22, elevation: Theme.Elevations.floating)
+                .padding(.top, Theme.Spacing.s)
+                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                .task(id: message) {
+                    UIAccessibility.post(notification: .announcement, argument: message)
+                    try? await Task.sleep(nanoseconds: 1_800_000_000)
+                    withAnimation(Theme.Motion.standard) {
+                        self.message = nil
                     }
+                }
             }
         }
         .animation(reduceMotion ? nil : Theme.Motion.bouncy, value: message)
@@ -228,7 +303,7 @@ extension View {
     }
 }
 
-/// A sheet's title row with a close button.
+/// A sheet's title row with a clay close button.
 struct SheetHeader: View {
     let title: String
     let onClose: () -> Void
@@ -245,6 +320,109 @@ struct SheetHeader: View {
             }
             .buttonStyle(NeumorphicIconButtonStyle())
             .accessibilityLabel("Close")
+        }
+    }
+}
+
+// MARK: - Dialogs
+
+/// A question or a set of choices, shown as a clay bottom sheet instead of the
+/// system's alert or action sheet.
+struct ClayDialog: Identifiable {
+    struct Action: Identifiable {
+        enum Kind {
+            case primary
+            case normal
+            case destructive
+        }
+
+        let id = UUID()
+        let title: String
+        var symbol: String?
+        var kind: Kind = .normal
+        let handler: () -> Void
+    }
+
+    let id = UUID()
+    let title: String
+    var message: String?
+    let actions: [Action]
+    var cancelTitle: String = "Cancel"
+}
+
+struct ClayDialogView: View {
+    let dialog: ClayDialog
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            Text(dialog.title)
+                .font(Theme.Fonts.title3)
+                .foregroundStyle(Theme.Colors.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            if let message = dialog.message {
+                Text(message)
+                    .font(Theme.Fonts.callout)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(spacing: Theme.Spacing.m) {
+                ForEach(dialog.actions) { action in
+                    Button(action: {
+                        dismiss()
+                        // Run once the sheet has gone, so the action can present something else.
+                        Task {
+                            try? await Task.sleep(nanoseconds: 350_000_000)
+                            action.handler()
+                        }
+                    }, label: {
+                        if let symbol = action.symbol {
+                            Label(action.title, systemImage: symbol)
+                        } else {
+                            Text(action.title)
+                        }
+                    })
+                    .buttonStyle(NeumorphicButtonStyle(prominence: prominence(of: action)))
+                }
+                Button(action: {
+                    dismiss()
+                }, label: {
+                    Text(dialog.cancelTitle)
+                })
+                .buttonStyle(NeumorphicButtonStyle(prominence: .secondary))
+            }
+            .padding(.top, Theme.Spacing.s)
+        }
+        .padding(.horizontal, Theme.Spacing.screen)
+        .padding(.top, Theme.Spacing.xl)
+        .padding(.bottom, Theme.Spacing.l)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .themedScreen()
+        .presentationDetents([.height(height), .large])
+        .claySheet()
+    }
+
+    private var height: CGFloat {
+        let messageHeight: CGFloat = dialog.message == nil ? 0 : 64
+        return 120 + messageHeight + CGFloat(dialog.actions.count + 1) * 68
+    }
+
+    private func prominence(of action: ClayDialog.Action) -> NeumorphicButtonStyle.Prominence {
+        switch action.kind {
+        case .primary: return .primary
+        case .normal: return .secondary
+        case .destructive: return .destructive
+        }
+    }
+}
+
+extension View {
+    /// Shows a ClayDialog as a bottom sheet while `dialog` is set.
+    func clayDialog(_ dialog: Binding<ClayDialog?>) -> some View {
+        sheet(item: dialog) { item in
+            ClayDialogView(dialog: item)
         }
     }
 }

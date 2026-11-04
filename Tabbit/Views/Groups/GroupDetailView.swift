@@ -7,76 +7,41 @@ struct GroupDetailView: View {
     @EnvironmentObject private var store: TabbitStore
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var flow: ReceiptFlow
-    @Environment(\.dismiss) private var dismiss
 
     @State private var editing: GroupEditorTarget?
     @State private var moving: ReceiptRecord?
-    @State private var deleting: ReceiptRecord?
+    @State private var dialog: ClayDialog?
+    @State private var openRow: UUID?
     @State private var toast: String?
 
     var body: some View {
         Group {
             if let group = store.group(groupID) {
                 content(group)
+                    .clayNavigation(group.displayName) {
+                        Button(action: {
+                            editing = .edit(group)
+                        }, label: {
+                            Image(systemName: "pencil")
+                        })
+                        .buttonStyle(NeumorphicIconButtonStyle())
+                        .accessibilityLabel("Edit group")
+                    }
             } else {
                 EmptyStateView(symbol: "person.3", title: "Group deleted", message: "This group is no longer here.")
+                    .frame(maxHeight: .infinity)
                     .themedScreen()
+                    .clayNavigation("Group")
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
         .toast($toast)
-    }
-
-    private func content(_ group: SplitGroup) -> some View {
-        let receipts = store.receipts(in: group.id)
-        return List {
-            GroupHeroCard(group: group, total: store.total(of: group),
-                          myBalanceCents: store.balances(in: group)[Person.meID] ?? 0)
-                .clayRow(top: Theme.Spacing.l)
-
-            if group.members.count > 1 {
-                Button(action: {
-                    router.push(.settleUp(group.id))
-                }, label: {
-                    Label("Settle Up", systemImage: "arrow.left.arrow.right")
-                })
-                .buttonStyle(NeumorphicButtonStyle(prominence: .primary))
-                .clayRow(top: Theme.Spacing.m)
+        .clayDialog($dialog)
+        .onAppear {
+            #if DEBUG
+            if DemoMode.screen == "swipe" {
+                openRow = store.receipts(in: groupID).first?.id
             }
-
-            SectionLabel(title: receipts.isEmpty ? "Receipts" : "Receipts · \(receipts.count)")
-                .clayRow(top: Theme.Spacing.l, bottom: 0)
-
-            if receipts.isEmpty {
-                EmptyStateView(symbol: "doc.viewfinder", title: "No receipts yet",
-                               message: "Tap + to scan a receipt, choose a photo or type one in.")
-                    .clayRow()
-            }
-            ForEach(receipts) { receipt in
-                receiptRow(receipt, group: group)
-            }
-        }
-        .clayList()
-        .navigationTitle(group.displayName)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            HStack {
-                Spacer()
-                FloatingAddButton(accessibilityName: "Add receipt") {
-                    flow.addReceipt(to: group.id)
-                }
-            }
-            .padding(.horizontal, Theme.Spacing.screen)
-            .padding(.bottom, Theme.Spacing.s)
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: {
-                    editing = .edit(group)
-                }, label: {
-                    Image(systemName: "pencil")
-                })
-                .accessibilityLabel("Edit group")
-            }
+            #endif
         }
         .sheet(item: $editing) { target in
             GroupEditorView(target: target)
@@ -88,85 +53,119 @@ struct GroupDetailView: View {
             })
             .environmentObject(store)
         }
-        .confirmationDialog("Delete this receipt?", isPresented: deletingBinding, titleVisibility: .visible,
-                            presenting: deleting, actions: { receipt in
-            Button("Delete Receipt", role: .destructive) {
-                withAnimation(Theme.Motion.standard) {
-                    store.delete(receipt.id)
+    }
+
+    private func content(_ group: SplitGroup) -> some View {
+        let receipts = store.receipts(in: group.id)
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                GroupHeroCard(group: group, total: store.total(of: group),
+                              myBalanceCents: store.balances(in: group)[Person.meID] ?? 0)
+
+                if group.members.count > 1 {
+                    Button(action: {
+                        router.push(.settleUp(group.id))
+                    }, label: {
+                        Label("Settle Up", systemImage: "arrow.left.arrow.right")
+                    })
+                    .buttonStyle(NeumorphicButtonStyle(prominence: .primary))
+                }
+
+                SectionLabel(title: receipts.isEmpty ? "Receipts" : "Receipts · \(receipts.count)")
+                    .padding(.top, Theme.Spacing.s)
+
+                if receipts.isEmpty {
+                    EmptyStateView(symbol: "doc.viewfinder", title: "No receipts yet",
+                                   message: "Tap + to scan a receipt, choose a photo or type one in.")
+                }
+                ForEach(receipts) { receipt in
+                    receiptRow(receipt, group: group)
                 }
             }
-            Button("Cancel", role: .cancel) {
+            .padding(.horizontal, Theme.Spacing.screen)
+            .padding(.top, Theme.Spacing.s)
+            .padding(.bottom, Theme.Spacing.xl)
+        }
+        .themedScreen()
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack {
+                Spacer()
+                FloatingAddButton(accessibilityName: "Add receipt") {
+                    flow.addReceipt(to: group.id)
+                }
             }
-        }, message: { receipt in
-            Text("“\(receipt.displayTitle)” and its photos will be deleted from this iPhone.")
-        })
+            .padding(.horizontal, Theme.Spacing.screen)
+            .padding(.bottom, Theme.Spacing.s)
+        }
     }
 
     private func receiptRow(_ receipt: ReceiptRecord, group: SplitGroup) -> some View {
-        Button(action: {
-            router.push(.receipt(receipt.id, inGroup: receipt.groupID))
-        }, label: {
-            ReceiptRow(receipt: receipt, people: group.members,
-                       myShareCents: store.split(receipt).share(for: Person.meID)?.totalCents)
-        })
-        .buttonStyle(NeumorphicCardButtonStyle())
-        .clayRow()
-        .receiptSwipeActions(onEdit: {
+        SwipeRow(id: receipt.id, openRow: $openRow, actions: receiptActions(receipt)) {
+            Button(action: {
+                if openRow != nil {
+                    withAnimation(Theme.Motion.standard) {
+                        openRow = nil
+                    }
+                } else {
+                    router.push(.receipt(receipt.id, inGroup: receipt.groupID))
+                }
+            }, label: {
+                ReceiptRow(receipt: receipt, people: group.members,
+                           myShareCents: store.split(receipt).share(for: Person.meID)?.totalCents)
+            })
+            .buttonStyle(NeumorphicCardButtonStyle())
+        }
+    }
+
+    private func receiptActions(_ receipt: ReceiptRecord) -> [SwipeAction] {
+        return ReceiptActions.swipeActions(for: receipt, onEdit: {
             flow.edit(receipt)
         }, onMove: {
             moving = receipt
         }, onDelete: {
-            deleting = receipt
-        })
-    }
-
-    private var deletingBinding: Binding<Bool> {
-        return Binding(get: {
-            deleting != nil
-        }, set: { isShowing in
-            if !isShowing {
-                deleting = nil
-            }
+            dialog = ReceiptActions.deleteDialog(for: receipt, store: store)
         })
     }
 }
 
-extension View {
-    /// Swipe left on a receipt: delete, move, edit (also offered as accessibility actions).
-    func receiptSwipeActions(onEdit: @escaping () -> Void, onMove: @escaping () -> Void,
-                             onDelete: @escaping () -> Void) -> some View {
-        self
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                Button(action: onDelete) {
-                    Label("Delete", systemImage: "trash")
-                }
-                .tint(Theme.Colors.swipeDelete)
-                Button(action: onMove) {
-                    Label("Move", systemImage: "folder")
-                }
-                .tint(Theme.Colors.swipeMove)
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                }
-                .tint(Theme.Colors.swipeEdit)
-            }
-            .accessibilityAction(named: "Edit", onEdit)
-            .accessibilityAction(named: "Move", onMove)
-            .accessibilityAction(named: "Delete", onDelete)
+/// The swipe buttons and delete question shared by every receipt list.
+enum ReceiptActions {
+    static func swipeActions(for receipt: ReceiptRecord, onEdit: @escaping () -> Void,
+                             onMove: @escaping () -> Void, onDelete: @escaping () -> Void) -> [SwipeAction] {
+        return [
+            SwipeAction(id: "edit", symbol: "pencil", label: "Edit", action: onEdit),
+            SwipeAction(id: "move", symbol: "folder", label: "Move", action: onMove),
+            SwipeAction(id: "delete", symbol: "trash", label: "Delete", isDestructive: true, action: onDelete),
+        ]
+    }
+
+    @MainActor
+    static func deleteDialog(for receipt: ReceiptRecord, store: TabbitStore) -> ClayDialog {
+        return ClayDialog(
+            title: "Delete “\(receipt.displayTitle)”?",
+            message: "The receipt and its photos are deleted from this iPhone.",
+            actions: [
+                ClayDialog.Action(title: "Delete Receipt", symbol: "trash", kind: .destructive) {
+                    withAnimation(Theme.Motion.standard) {
+                        store.delete(receipt.id)
+                    }
+                },
+            ]
+        )
     }
 }
 
-/// The top of a group: badge, name, total spent, people and my balance.
+/// The top of a group: badge, name, total spent, people and my balance. Information only.
 struct GroupHeroCard: View {
     let group: SplitGroup
     let total: Decimal
     let myBalanceCents: Int
 
     var body: some View {
-        NeumorphicCard {
+        InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 HStack(spacing: Theme.Spacing.m) {
-                    CategoryBadge(symbol: group.category.symbol, colorIndex: group.category.colorIndex, size: 56)
+                    CategoryBadge(symbol: group.category.symbol, colorIndex: group.category.colorIndex, size: 52)
                     VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                         Text(group.displayName)
                             .font(Theme.Fonts.title)
@@ -188,7 +187,7 @@ struct GroupHeroCard: View {
                 HStack {
                     AvatarStack(people: group.members, size: 32, limit: 5)
                     Spacer(minLength: Theme.Spacing.s)
-                    BalanceChip(cents: myBalanceCents)
+                    BalancePill(cents: myBalanceCents)
                 }
             }
         }
@@ -236,7 +235,7 @@ struct ReceiptRow: View {
                 if let mine = myShareCents, people.count > 1 {
                     Text("Yours \(Money.string(Money.fromCents(mine)))")
                         .font(Theme.Fonts.caption)
-                        .foregroundStyle(Theme.Colors.accentInk)
+                        .foregroundStyle(Theme.Colors.secondaryText)
                 }
             }
         }

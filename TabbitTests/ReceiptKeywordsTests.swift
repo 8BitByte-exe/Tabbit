@@ -44,8 +44,28 @@ final class ReceiptKeywordsTests: XCTestCase {
             ("ORIGINAL CHIPS 3.99", .other),
             ("TAXI FARE 12.00", .other),
             ("CASHEWS 5.99", .other),
-            ("COUPON -0.50", .other),
+            ("COUPON -0.50", .discount),
+            ("MEMBER DISCOUNT 1.00", .discount),
+            ("20% OFF 3.00", .discount),
+            ("ROUNDING -0.02", .rounding),
             ("BANANAS 1.29", .other),
+            ("CHOCOLATE BAR 1.99", .other),
+            ("SUMMER SALAD 9.99", .other),
+            ("IMPORTED BEER 5.99", .other),
+            // Other languages
+            ("SUMME 5,50", .total),
+            ("SUMA 12,40", .total),
+            ("ZWISCHENSUMME 5,50", .subtotal),
+            ("SOUS-TOTAL 9,80", .subtotal),
+            ("ZU ZAHLEN 5,50", .strongTotal),
+            ("TOTAL A PAGAR 12,40", .strongTotal),
+            ("MWST 19% 0,88", .tax),
+            ("IVA 21% 2,15", .tax),
+            ("INKL. MWST 0,88", .includedTax),
+            ("IVA INCLUIDO 2,15", .includedTax),
+            ("VAT INCLUDED 1.50", .includedTax),
+            ("RÜCKGELD 14,50", .payment),
+            ("TARJETA 12,40", .payment),
         ]
         for (text, role) in expectations {
             XCTAssertEqual(ReceiptKeywords.role(for: text), role, "\"\(text)\"")
@@ -58,6 +78,8 @@ final class ReceiptKeywordsTests: XCTestCase {
         XCTAssertTrue(ReceiptKeywords.isDetailOnly(""))
         XCTAssertTrue(ReceiptKeywords.isDetailOnly("1.25 LB @ 0.99/LB"))
         XCTAssertTrue(ReceiptKeywords.isDetailOnly("2 X 0.99"))
+        XCTAssertTrue(ReceiptKeywords.isDetailOnly("0,456 KG X 3,99 EUR/KG"))
+        XCTAssertTrue(ReceiptKeywords.isDetailOnly("2 STK X 1,29"))
         XCTAssertFalse(ReceiptKeywords.isDetailOnly("SODA"))
     }
 }

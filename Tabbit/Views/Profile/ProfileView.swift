@@ -41,7 +41,7 @@ struct ProfileView: View {
                 HStack(spacing: Theme.Spacing.m) {
                     AvatarView(person: store.me, size: 56)
                         .padding(Theme.Spacing.xs)
-                        .clayRaised(cornerRadius: 32, elevation: Theme.Elevations.control)
+                        .clayRaised(cornerRadius: 32, elevation: Theme.Elevations.small)
                     VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                         Text(store.me.name)
                             .font(Theme.Fonts.title)
@@ -49,7 +49,7 @@ struct ProfileView: View {
                             .lineLimit(1)
                         Label("Edit profile", systemImage: "pencil")
                             .font(Theme.Fonts.caption)
-                            .foregroundStyle(Theme.Colors.accentInk)
+                            .foregroundStyle(Theme.Colors.secondaryText)
                     }
                 }
             })
@@ -82,10 +82,7 @@ struct ProfileView: View {
 
     private func statTile(title: String, value: String, symbol: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Image(systemName: symbol)
-                .font(Theme.Fonts.headline)
-                .foregroundStyle(Theme.Colors.accentInk)
-                .accessibilityHidden(true)
+            IconBadge(symbol: symbol, tone: .positive, size: 30)
             Text(value)
                 .font(Theme.Fonts.headline.monospacedDigit())
                 .foregroundStyle(Theme.Colors.text)
@@ -97,7 +94,7 @@ struct ProfileView: View {
         }
         .padding(Theme.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .clayRaised(cornerRadius: Theme.Radius.tile)
+        .clayPlate(cornerRadius: Theme.Radius.tile)
         .accessibilityElement(children: .combine)
     }
 }
@@ -107,7 +104,7 @@ struct MonthCard: View {
     let stats: SpendingStats
 
     var body: some View {
-        NeumorphicCard {
+        InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 Text("Spent this month")
                     .font(Theme.Fonts.subheadline)
@@ -126,13 +123,11 @@ struct MonthCard: View {
         if let change = stats.monthChange {
             let percent = Int((abs(change) * 100).rounded())
             if percent == 0 {
-                StatusChip(title: "Same as last month", symbol: "equal.circle.fill", tint: Theme.Colors.secondaryText)
+                StatusPill(title: "Same as last month", symbol: "equal", tone: .neutral)
             } else if change > 0 {
-                StatusChip(title: "\(percent)% more than last month", symbol: "arrow.up.right.circle.fill",
-                           tint: Theme.Colors.warning)
+                StatusPill(title: "\(percent)% more than last month", symbol: "arrow.up.right", tone: .caution)
             } else {
-                StatusChip(title: "\(percent)% less than last month", symbol: "arrow.down.right.circle.fill",
-                           tint: Theme.Colors.accentInk)
+                StatusPill(title: "\(percent)% less than last month", symbol: "arrow.down.right", tone: .positive)
             }
         } else {
             Text("Your share of group receipts, plus your own.")
@@ -147,7 +142,7 @@ struct CategoryRingCard: View {
     let stats: SpendingStats
 
     var body: some View {
-        NeumorphicCard {
+        InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 SectionLabel(title: "Where it went")
                 HStack(alignment: .center, spacing: Theme.Spacing.xl) {
@@ -243,7 +238,7 @@ struct MonthsChartCard: View {
     let stats: SpendingStats
 
     var body: some View {
-        NeumorphicCard {
+        InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 SectionLabel(title: "Last 6 months")
                 Chart(stats.months) { month in
@@ -276,7 +271,7 @@ struct MonthsChartCard: View {
     /// translucent fills turn muddy on the dark card.
     private func style(for month: SpendingStats.MonthTotal) -> Color {
         if month.id == stats.months.last?.id {
-            return Theme.Colors.chartHighlight
+            return Theme.Colors.accentLow
         }
         return Theme.Colors.chartMuted
     }
@@ -307,7 +302,7 @@ struct ProfileEditSheet: View {
                 AvatarView(person: Person(id: Person.meID, name: name.isEmpty ? "Me" : name, colorIndex: colorIndex),
                            size: 88)
                     .padding(Theme.Spacing.s)
-                    .clayRaised(cornerRadius: 52, elevation: Theme.Elevations.control)
+                    .clayPlate(cornerRadius: 52)
                 Spacer()
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {

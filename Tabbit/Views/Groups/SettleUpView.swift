@@ -1,8 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// The fewest payments that make a group even. Each one opens to show the
-/// receipts behind it; swipe (or tap the button) to mark it paid.
+/// The fewest payments that make a group even. Each payment opens to show the
+/// receipts behind it, with a button to mark it paid.
 struct SettleUpView: View {
     let groupID: UUID
 
@@ -17,68 +17,76 @@ struct SettleUpView: View {
                 content(group)
             } else {
                 EmptyStateView(symbol: "person.3", title: "Group deleted", message: "This group is no longer here.")
+                    .frame(maxHeight: .infinity)
                     .themedScreen()
             }
         }
-        .navigationTitle("Settle Up")
-        .navigationBarTitleDisplayMode(.inline)
+        .clayNavigation("Settle Up")
         .toast($toast)
+        .onAppear {
+            #if DEBUG
+            if DemoMode.screen == "settle", let group = store.group(groupID),
+               let first = store.transfers(in: group).first {
+                expanded.insert(first.id)
+            }
+            #endif
+        }
         .sensoryFeedback(.success, trigger: paidCount)
     }
 
     private func content(_ group: SplitGroup) -> some View {
         let transfers = store.transfers(in: group)
         let summary = SettleUp.summary(groupName: group.displayName, transfers: transfers, people: group.members)
-        return List {
-            summaryCard(transfers: transfers)
-                .clayRow(top: Theme.Spacing.l)
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                summaryCard(transfers: transfers)
 
-            if !transfers.isEmpty {
-                SectionLabel(title: "Payments")
-                    .clayRow(top: Theme.Spacing.l, bottom: 0)
-                ForEach(transfers) { transfer in
-                    transferRow(transfer, group: group)
+                if !transfers.isEmpty {
+                    SectionLabel(title: "Payments")
+                        .padding(.top, Theme.Spacing.s)
+                    ForEach(transfers) { transfer in
+                        transferCard(transfer, group: group)
+                    }
+                }
+
+                HStack(spacing: Theme.Spacing.m) {
+                    Button(action: {
+                        UIPasteboard.general.string = summary
+                        toast = "Copied"
+                    }, label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    })
+                    .buttonStyle(NeumorphicButtonStyle(prominence: .secondary))
+
+                    ShareLink(item: summary) {
+                        Label("Send", systemImage: "paperplane.fill")
+                    }
+                    .buttonStyle(NeumorphicButtonStyle(prominence: .primary))
+                }
+                .padding(.top, Theme.Spacing.s)
+
+                if !group.settlements.isEmpty {
+                    SectionLabel(title: "Paid")
+                        .padding(.top, Theme.Spacing.s)
+                    ForEach(Array(group.settlements.reversed())) { settlement in
+                        settlementRow(settlement, group: group)
+                    }
                 }
             }
-
-            HStack(spacing: Theme.Spacing.m) {
-                Button(action: {
-                    UIPasteboard.general.string = summary
-                    toast = "Copied"
-                }, label: {
-                    Label("Copy", systemImage: "doc.on.doc")
-                })
-                .buttonStyle(NeumorphicButtonStyle(prominence: .secondary))
-
-                ShareLink(item: summary) {
-                    Label("Send", systemImage: "paperplane.fill")
-                }
-                .buttonStyle(NeumorphicButtonStyle(prominence: .primary))
-            }
-            .clayRow(top: Theme.Spacing.l)
-
-            if !group.settlements.isEmpty {
-                SectionLabel(title: "Paid")
-                    .clayRow(top: Theme.Spacing.l, bottom: 0)
-                ForEach(Array(group.settlements.reversed())) { settlement in
-                    settlementRow(settlement, group: group)
-                }
-            }
+            .padding(.horizontal, Theme.Spacing.screen)
+            .padding(.top, Theme.Spacing.s)
+            .padding(.bottom, Theme.Spacing.xxl)
         }
-        .clayList()
+        .themedScreen()
     }
 
     // MARK: - Summary
 
     private func summaryCard(transfers: [Transfer]) -> some View {
-        NeumorphicCard {
+        InfoCard {
             HStack(spacing: Theme.Spacing.l) {
-                Image(systemName: transfers.isEmpty ? "checkmark.seal.fill" : "arrow.left.arrow.right")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(Theme.Colors.accentInk)
-                    .frame(width: 64, height: 64)
-                    .clayInset(cornerRadius: 32)
-                    .accessibilityHidden(true)
+                IconBadge(symbol: transfers.isEmpty ? "checkmark.seal.fill" : "arrow.left.arrow.right",
+                          tone: transfers.isEmpty ? .positive : .neutral, size: 56)
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text(transfers.isEmpty ? "Everyone's even" : paymentsTitle(transfers.count))
                         .font(Theme.Fonts.title3)
@@ -100,24 +108,11 @@ struct SettleUpView: View {
 
     // MARK: - Transfers
 
-    private func transferRow(_ transfer: Transfer, group: SplitGroup) -> some View {
-        let isOpen = expanded.contains(transfer.id)
-        return VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            Button(action: {
-                withAnimation(Theme.Motion.standard) {
-                    if isOpen {
-                        expanded.remove(transfer.id)
-                    } else {
-                        expanded.insert(transfer.id)
-                    }
-                }
-            }, label: {
-                TransferHeadline(transfer: transfer, people: group.members, isOpen: isOpen)
-            })
-            .buttonStyle(.plain)
-            .accessibilityHint(isOpen ? "Hides the receipts behind this payment" : "Shows the receipts behind this payment")
-
-            if isOpen {
+    private func transferCard(_ transfer: Transfer, group: SplitGroup) -> some View {
+        Expandable(isExpanded: expansionBinding(transfer.id)) {
+            TransferHeadline(transfer: transfer, people: group.members)
+        } content: {
+            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 TransferDetails(details: SettleUp.details(debtor: transfer.from, creditor: transfer.to,
                                                           receipts: store.receipts(in: group.id),
                                                           members: group.memberIDs))
@@ -128,29 +123,25 @@ struct SettleUpView: View {
                 })
                 .buttonStyle(NeumorphicButtonStyle(prominence: .primary, compact: true))
             }
+            .padding(.top, Theme.Spacing.m)
         }
         .padding(Theme.Spacing.l)
-        .clayRaised()
-        .clayRow()
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(action: {
-                markPaid(transfer, group: group)
-            }, label: {
-                Label("Paid", systemImage: "checkmark")
-            })
-            .tint(Theme.Colors.swipeEdit)
-        }
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            Button(action: {
-                markPaid(transfer, group: group)
-            }, label: {
-                Label("Paid", systemImage: "checkmark")
-            })
-            .tint(Theme.Colors.swipeEdit)
-        }
+        .clayPlate()
         .accessibilityAction(named: "Mark paid") {
             markPaid(transfer, group: group)
         }
+    }
+
+    private func expansionBinding(_ id: String) -> Binding<Bool> {
+        return Binding(get: {
+            expanded.contains(id)
+        }, set: { isOpen in
+            if isOpen {
+                expanded.insert(id)
+            } else {
+                expanded.remove(id)
+            }
+        })
     }
 
     private func markPaid(_ transfer: Transfer, group: SplitGroup) {
@@ -169,36 +160,27 @@ struct SettleUpView: View {
         let toName = group.members.displayName(settlement.to)
         let to = toName == "You" ? "you" : toName
         return HStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(Theme.Fonts.title3)
-                .foregroundStyle(Theme.Colors.accentInk)
-                .accessibilityHidden(true)
+            IconBadge(symbol: "checkmark", tone: .positive, size: 32)
             VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text("\(from) paid \(to)")
                     .font(Theme.Fonts.body)
                     .foregroundStyle(Theme.Colors.text)
-                Text(DateText.short(settlement.date))
+                Text("\(Money.string(settlement.amount)) · \(DateText.short(settlement.date))")
                     .font(Theme.Fonts.caption)
                     .foregroundStyle(Theme.Colors.secondaryText)
             }
+            .accessibilityElement(children: .combine)
             Spacer()
-            MoneyText(amount: settlement.amount, font: Theme.Fonts.money)
-        }
-        .padding(Theme.Spacing.l)
-        .clayInset(cornerRadius: Theme.Radius.tile)
-        .accessibilityElement(children: .combine)
-        .clayRow()
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(action: {
                 undo(settlement, group: group)
             }, label: {
-                Label("Undo", systemImage: "arrow.uturn.backward")
+                Image(systemName: "arrow.uturn.backward")
             })
-            .tint(Theme.Colors.swipeDelete)
+            .buttonStyle(NeumorphicIconButtonStyle())
+            .accessibilityLabel("Undo payment")
         }
-        .accessibilityAction(named: "Undo payment") {
-            undo(settlement, group: group)
-        }
+        .padding(Theme.Spacing.m)
+        .clayPlate(cornerRadius: Theme.Radius.tile)
     }
 
     private func undo(_ settlement: Settlement, group: SplitGroup) {
@@ -213,7 +195,6 @@ struct SettleUpView: View {
 struct TransferHeadline: View {
     let transfer: Transfer
     let people: [Person]
-    let isOpen: Bool
 
     var body: some View {
         HStack(spacing: Theme.Spacing.m) {
@@ -230,16 +211,9 @@ struct TransferHeadline: View {
                     .font(Theme.Fonts.headline)
                     .foregroundStyle(Theme.Colors.text)
                     .fixedSize(horizontal: false, vertical: true)
-                MoneyText(amount: transfer.amount, font: Theme.Fonts.money, color: Theme.Colors.accentInk)
+                MoneyText(amount: transfer.amount, font: Theme.Fonts.money)
             }
-            Spacer(minLength: Theme.Spacing.s)
-            Image(systemName: "chevron.down")
-                .font(Theme.Fonts.caption.weight(.bold))
-                .foregroundStyle(Theme.Colors.secondaryText)
-                .rotationEffect(.degrees(isOpen ? 180 : 0))
-                .accessibilityHidden(true)
         }
-        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 

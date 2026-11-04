@@ -5,8 +5,8 @@ import UIKit
 /// Screenshot mode for CI (Debug builds only; the Release IPA doesn't contain it).
 ///
 /// Launch arguments: `-TabbitDemo -TabbitScreen <screen>`, where screen is one of
-/// groups, group, receipt, settle, edit, add, mine, profile, settings, whatsnew,
-/// processing or empty. Sample data goes into a throwaway folder, never the real store.
+/// groups, group, swipe, receipt, settle, edit, category, add, mine, sort, profile, settings,
+/// whatsnew, processing, dialog or empty. Sample data goes into a throwaway folder, never the real store.
 enum DemoMode {
 
     static var isEnabled: Bool {
@@ -40,7 +40,7 @@ enum DemoMode {
     private static let casey = Person(id: id(3), name: "Casey", colorIndex: 3)
     private static let drew = Person(id: id(4), name: "Drew", colorIndex: 4)
 
-    private static let lisbonID = id(100)
+    static let lisbonID = id(100)
     private static let flatID = id(101)
     private static let dinnerID = id(102)
     private static let timeOutID = id(200)
@@ -106,10 +106,10 @@ enum DemoMode {
                                    item("Carbonara", "17.50", [me]), item("Tiramisu", "9.00")],
                            tax: amount("4.20"), tip: .amount(amount("9.00"))), nil),
             // My Receipts, over a few months for the profile charts.
-            (ReceiptRecord(merchant: "The Daily Grind", date: daysAgo(0), category: .food,
+            (ReceiptRecord(merchant: "The Daily Grind", date: daysAgo(0), category: .coffee,
                            items: [item("Oat latte", "5.25"), item("Almond croissant", "4.50")],
                            tax: amount("0.87"), source: .camera), nil),
-            (ReceiptRecord(merchant: "Hardware Plus", date: daysAgo(1), category: .shopping,
+            (ReceiptRecord(merchant: "Hardware Plus", date: daysAgo(1), category: .household,
                            items: [item("Extension cord", "12.99"), item("Wood screws", "6.49")],
                            tax: amount("1.56")), nil),
             (ReceiptRecord(merchant: "Corner Pharmacy", date: daysAgo(3), category: .health,
@@ -124,7 +124,7 @@ enum DemoMode {
                            total: amount("88.00")), nil),
             (ReceiptRecord(merchant: "Sushi Bar", date: daysAgo(130), category: .food,
                            total: amount("164.50")), nil),
-            (ReceiptRecord(merchant: "Garden Centre", date: daysAgo(155), category: .shopping,
+            (ReceiptRecord(merchant: "Garden Centre", date: daysAgo(155), category: .household,
                            total: amount("118.00")), nil),
         ]
         for (record, image) in records {
@@ -141,19 +141,19 @@ enum DemoMode {
     @MainActor
     static func prepare(router: AppRouter, flow: ReceiptFlow, store: TabbitStore) {
         switch screen {
-        case "group":
+        case "group", "swipe":
             router.groupsPath = [.group(lisbonID)]
         case "receipt":
             router.groupsPath = [.group(lisbonID), .receipt(timeOutID, inGroup: lisbonID)]
         case "settle":
             router.groupsPath = [.group(lisbonID), .settleUp(lisbonID)]
-        case "edit":
+        case "edit", "category":
             router.groupsPath = [.group(lisbonID)]
             flow.session = scannedSession()
         case "add":
             router.groupsPath = [.group(lisbonID)]
             flow.addReceipt(to: lisbonID)
-        case "mine":
+        case "mine", "sort":
             router.tab = .receipts
         case "profile":
             router.tab = .profile

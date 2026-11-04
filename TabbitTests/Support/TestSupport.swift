@@ -23,12 +23,14 @@ struct ReceiptLayoutBuilder {
     private var pageIndex: Int = 0
     private var pageCount: Int = 1
 
+    /// `height` makes a taller row, like a store name printed in a bigger font.
     func row(_ left: String, _ right: String? = nil, rightYOffset: CGFloat = 0,
-             confidence: Float = 1, alternatives: [String] = []) -> ReceiptLayoutBuilder {
+             confidence: Float = 1, alternatives: [String] = [],
+             height: CGFloat = ReceiptLayoutBuilder.rowHeight) -> ReceiptLayoutBuilder {
         var copy = self
-        let minY = copy.nextRowTop - ReceiptLayoutBuilder.rowHeight
+        let minY = copy.nextRowTop - height
         copy.blocks.append(copy.makeBlock(left, x: 0.05, y: minY, width: 0.45,
-                                          confidence: confidence, alternatives: alternatives))
+                                          confidence: confidence, alternatives: alternatives, height: height))
         if let right = right {
             copy.blocks.append(copy.makeBlock(right, x: 0.75, y: minY + rightYOffset, width: 0.15,
                                               confidence: 1, alternatives: []))
@@ -69,11 +71,12 @@ struct ReceiptLayoutBuilder {
     }
 
     private func makeBlock(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat,
-                           confidence: Float, alternatives: [String]) -> RecognizedTextBlock {
+                           confidence: Float, alternatives: [String],
+                           height: CGFloat = ReceiptLayoutBuilder.rowHeight) -> RecognizedTextBlock {
         return RecognizedTextBlock(
             text: text,
             confidence: confidence,
-            boundingBox: CGRect(x: x, y: y, width: width, height: ReceiptLayoutBuilder.rowHeight),
+            boundingBox: CGRect(x: x, y: y, width: width, height: height),
             pageIndex: pageIndex,
             alternatives: alternatives
         )

@@ -15,8 +15,9 @@ enum Changelog {
             (symbol: "person.3.fill", text: "Groups for trips, events and home, with everyone you share costs with."),
             (symbol: "checklist", text: "Assign each item to the people who had it. Tax and tip follow along."),
             (symbol: "arrow.left.arrow.right", text: "Settle Up shows the fewest payments to make everyone even."),
-            (symbol: "chart.pie.fill", text: "See where your money goes on your profile."),
-            (symbol: "leaf.fill", text: "A calmer look, in light and dark."),
+            (symbol: "chart.pie.fill", text: "See where your money goes on your profile, across 24 categories."),
+            (symbol: "text.viewfinder", text: "Reads more receipts: weights, discounts, and tax already included in European prices."),
+            (symbol: "sparkles", text: "A calmer, tactile look in clean white or charcoal."),
         ]),
         Entry(version: "0.4", title: "Saved receipts", highlights: [
             (symbol: "tray.full.fill", text: "Receipts and photos are saved on your iPhone."),

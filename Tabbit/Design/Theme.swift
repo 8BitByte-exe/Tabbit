@@ -1,12 +1,15 @@
 import SwiftUI
 import UIKit
 
-/// Tabbit's design tokens: soft, matte, clay-like surfaces lit from the top-left,
-/// with a calm mint-sage green for money and primary actions.
+/// Tabbit's design tokens: soft clay surfaces lit from the top-left on clean white
+/// (light) or charcoal (dark), with one mint brand color that's the same in both modes.
 ///
 /// Every color, radius, spacing, shadow, font and animation used by the views
 /// lives here. Views use the components in Components.swift instead of
 /// repeating shadow code.
+///
+/// Depth means "you can touch this": raised clay is for buttons and tappable cards,
+/// flat plates are for information, and inset wells are for typing and toggles.
 enum Theme {
 
     // MARK: - Palette
@@ -38,49 +41,48 @@ enum Theme {
     /// All colors. Text colors pass WCAG AA (4.5:1) on every surface in both
     /// modes; ThemeContrastTests checks this in CI.
     enum Palette {
-        // Surfaces: a faint green-grey tint, so the whole app feels calm.
-        static let background = Swatch(light: 0xE9EEEB, dark: 0x222725)
-        /// Raised surfaces fade from `surfaceHigh` (top-left, toward the light)
-        /// to `surfaceLow` (bottom-right): matte, never glossy.
-        static let surfaceHigh = Swatch(light: 0xF2F6F3, dark: 0x2A302D)
-        static let surfaceLow = Swatch(light: 0xE3E9E5, dark: 0x1F2422)
-        /// Pressed-in wells: fields, tracks, selected segments, pressed buttons.
-        static let inset = Swatch(light: 0xDEE5E0, dark: 0x1B201E)
+        // Surfaces: neutral, bright white in light mode and charcoal in dark mode.
+        static let background = Swatch(light: 0xF3F4F6, dark: 0x1B1B1D)
+        /// Raised clay fades from `surfaceHigh` (top-left, toward the light) to
+        /// `surfaceLow` (bottom-right).
+        static let surfaceHigh = Swatch(light: 0xFFFFFF, dark: 0x2A2A2D)
+        static let surfaceLow = Swatch(light: 0xF0F1F4, dark: 0x202022)
+        /// Pressed-in wells: fields, tracks, pressed buttons.
+        static let inset = Swatch(light: 0xE8EAEE, dark: 0x141416)
+        /// Flat information panels, with a hairline edge instead of a shadow.
+        static let plate = Swatch(light: 0xFFFFFF, dark: 0x242427)
+        static let hairline = Swatch(light: 0xE2E4E9, dark: 0x323236)
 
-        // Text and icons
-        static let text = Swatch(light: 0x22302B, dark: 0xE6EEE9)
-        static let secondaryText = Swatch(light: 0x51615A, dark: 0xA0AFA8)
+        // Text and icons (never pure black or white).
+        static let text = Swatch(light: 0x1D1F23, dark: 0xECECEE)
+        static let secondaryText = Swatch(light: 0x5A5F68, dark: 0xA3A3AA)
 
-        // Accent: mint-sage. Fills use the gradient with dark text on top;
-        // green text and icons use `accentInk`.
+        // The brand mint: identical in light and dark mode. Only ever a fill,
+        // with `onAccent` (dark) text and icons on it.
         static let accentHigh = Swatch(light: 0xA8EECB, dark: 0xA8EECB)
         static let accentLow = Swatch(light: 0x6ED6A4, dark: 0x6ED6A4)
-        static let onAccent = Swatch(light: 0x14251D, dark: 0x12221A)
-        static let accentInk = Swatch(light: 0x1B6844, dark: 0x8FE5BC)
-        /// Shadows under green buttons are tinted green, so the color stays clean.
-        static let accentShade = Swatch(light: 0x3FA877, dark: 0x0B1E15, lightOpacity: 0.42, darkOpacity: 0.9)
+        static let onAccent = Swatch(light: 0x112018, dark: 0x112018)
+        /// Shadows under mint fills are softly mint-tinted in light mode, so the color stays clean.
+        static let accentShade = Swatch(light: 0x3FBF85, dark: 0x000000, lightOpacity: 0.28, darkOpacity: 0.6)
 
-        // Status (always paired with an icon or label)
-        static let warning = Swatch(light: 0x835400, dark: 0xF0B85C)
-        static let danger = Swatch(light: 0xA1352A, dark: 0xFF9C8F)
+        // Status fills (with `onPastel` text and always an icon).
+        static let cautionFill = Swatch(light: 0xF7DFA8, dark: 0xF2D08A)
+        static let dangerFill = Swatch(light: 0xF8CFCB, dark: 0xF2B8B3)
+
+        // Status text, for short inline messages next to an icon.
+        static let warning = Swatch(light: 0x8A5300, dark: 0xF2C063)
+        static let danger = Swatch(light: 0xB3261E, dark: 0xFF8F87)
 
         // Lighting: one light source at the top-left.
-        static let highlight = Swatch(light: 0xFFFFFF, dark: 0x333A36, lightOpacity: 0.95, darkOpacity: 0.85)
-        static let shade = Swatch(light: 0xA6B8AF, dark: 0x101412, lightOpacity: 0.6, darkOpacity: 0.8)
-        /// A crisp 1pt edge on the lit side of raised surfaces.
-        static let edge = Swatch(light: 0xFFFFFF, dark: 0x3B4440, lightOpacity: 0.8, darkOpacity: 0.7)
+        static let highlight = Swatch(light: 0xFFFFFF, dark: 0x3A3A3F, lightOpacity: 1, darkOpacity: 0.5)
+        static let shade = Swatch(light: 0xB5BBC6, dark: 0x000000, lightOpacity: 0.5, darkOpacity: 0.6)
+        /// A soft lit edge on the light side of raised clay.
+        static let edge = Swatch(light: 0xFFFFFF, dark: 0x3C3C41, lightOpacity: 0.9, darkOpacity: 0.55)
         /// A visible outline for Reduce Transparency / Increase Contrast.
-        static let outline = Swatch(light: 0x8FA097, dark: 0x5A6862)
+        static let outline = Swatch(light: 0x9AA0AA, dark: 0x5C5C63)
 
-        // Swipe-action fills. iOS draws their icons and labels in white, so these
-        // stay dark enough for 4.5:1 in both modes.
-        static let swipeEdit = Swatch(light: 0x2E7A57, dark: 0x2E7A57)
-        static let swipeMove = Swatch(light: 0x3F6699, dark: 0x3F6699)
-        static let swipeDelete = Swatch(light: 0xB23A2C, dark: 0xB23A2C)
-
-        /// Solid chart fills: the highlighted bar, and the others (a soft green, never translucent grey).
-        static let chartHighlight = Swatch(light: 0x5CCB96, dark: 0x7ADDAD)
-        static let chartMuted = Swatch(light: 0xC9E8D8, dark: 0x3F5E4F)
+        /// Chart bars that aren't highlighted.
+        static let chartMuted = Swatch(light: 0xE1E4E9, dark: 0x3A3A3F)
     }
 
     /// Shorthand for the SwiftUI colors.
@@ -89,33 +91,33 @@ enum Theme {
         static let surfaceHigh = Palette.surfaceHigh.color
         static let surfaceLow = Palette.surfaceLow.color
         static let inset = Palette.inset.color
+        static let plate = Palette.plate.color
+        static let hairline = Palette.hairline.color
         static let text = Palette.text.color
         static let secondaryText = Palette.secondaryText.color
         static let accentHigh = Palette.accentHigh.color
         static let accentLow = Palette.accentLow.color
         static let onAccent = Palette.onAccent.color
-        static let accentInk = Palette.accentInk.color
         static let accentShade = Palette.accentShade.color
+        static let cautionFill = Palette.cautionFill.color
+        static let dangerFill = Palette.dangerFill.color
         static let warning = Palette.warning.color
         static let danger = Palette.danger.color
         static let highlight = Palette.highlight.color
         static let shade = Palette.shade.color
         static let edge = Palette.edge.color
         static let outline = Palette.outline.color
-        static let swipeEdit = Palette.swipeEdit.color
-        static let swipeMove = Palette.swipeMove.color
-        static let swipeDelete = Palette.swipeDelete.color
-        static let chartHighlight = Palette.chartHighlight.color
         static let chartMuted = Palette.chartMuted.color
+        static let onPastel = Theme.onPastel.color
     }
 
     enum Gradients {
-        /// Matte surface: lighter toward the light (top-left), a touch darker away from it.
+        /// Raised clay: lighter toward the light (top-left), a touch darker away from it.
         static let surface = LinearGradient(
             colors: [Colors.surfaceHigh, Colors.surfaceLow], startPoint: .topLeading, endPoint: .bottomTrailing)
         static let accent = LinearGradient(
             colors: [Colors.accentHigh, Colors.accentLow], startPoint: .topLeading, endPoint: .bottomTrailing)
-        /// The crisp lit edge, fading out before the shaded side.
+        /// The soft lit edge, fading out well before the shaded side.
         static let edge = LinearGradient(
             colors: [Colors.edge, Color.clear], startPoint: .topLeading, endPoint: .center)
     }
@@ -132,11 +134,14 @@ enum Theme {
         Swatch(light: 0xC3EEEA, dark: 0xA6DFD9),
         Swatch(light: 0xF2E2A8, dark: 0xE6D18A),
         // Neutral, for "Other".
-        Swatch(light: 0xD9E0DC, dark: 0xBFC9C3),
+        Swatch(light: 0xDDE1E6, dark: 0xC4CAD2),
+        Swatch(light: 0xD4D9F7, dark: 0xB9C1EE),
+        Swatch(light: 0xFAD3E6, dark: 0xF0B9D3),
+        Swatch(light: 0xCDEFF7, dark: 0xACE0EE),
     ]
 
-    /// Text on pastel fills (both modes).
-    static let onPastel = Swatch(light: 0x1E2B25, dark: 0x1E2B25)
+    /// Text on pastel and status fills (both modes).
+    static let onPastel = Swatch(light: 0x1D1F23, dark: 0x1D1F23)
 
     static func pastel(_ index: Int) -> Color {
         let count = pastels.count
@@ -171,6 +176,8 @@ enum Theme {
         static let tapTarget: CGFloat = 48
         static let fieldHeight: CGFloat = 50
         static let tabBarHeight: CGFloat = 68
+        /// Height of the custom navigation header on pushed screens.
+        static let headerHeight: CGFloat = 60
     }
 
     // MARK: - Shadows
@@ -183,26 +190,29 @@ enum Theme {
     }
 
     enum Elevations {
-        static let card = Elevation(offset: 7, radius: 10)
-        static let control = Elevation(offset: 5, radius: 7)
-        static let floating = Elevation(offset: 8, radius: 14)
-        static let small = Elevation(offset: 3, radius: 4)
+        static let card = Elevation(offset: 6, radius: 12)
+        static let control = Elevation(offset: 4, radius: 9)
+        static let floating = Elevation(offset: 7, radius: 16)
+        static let small = Elevation(offset: 3, radius: 6)
     }
 
-    /// Inner shadow used by inset wells.
+    /// Inner shading of pressed and inset surfaces. Each side fades out before the
+    /// middle, so the lit side never gets a dark line.
     enum Inner {
-        static let lineWidth: CGFloat = 6
-        static let blur: CGFloat = 4
-        static let offset: CGFloat = 3
+        static let lineWidth: CGFloat = 10
+        static let blur: CGFloat = 5
+        static let offset: CGFloat = 2
     }
 
     // MARK: - Motion
 
     enum Motion {
-        /// Press feedback: quick, slightly springy.
-        static let press = Animation.spring(response: 0.25, dampingFraction: 0.7)
+        /// Press feedback: quick and soft.
+        static let press = Animation.easeOut(duration: 0.16)
         /// Appearing/disappearing content and value changes.
         static let standard = Animation.snappy(duration: 0.3)
+        /// Opening and closing drop-downs: smooth, no bounce.
+        static let expand = Animation.smooth(duration: 0.32)
         static let bouncy = Animation.bouncy(duration: 0.4)
         static let pressedScale: CGFloat = 0.97
     }
@@ -232,38 +242,6 @@ enum Theme {
         let green = CGFloat((hex >> 8) & 0xFF) / 255
         let blue = CGFloat(hex & 0xFF) / 255
         return UIColor(red: red, green: green, blue: blue, alpha: CGFloat(opacity))
-    }
-
-    /// A rounded system font for UIKit (navigation bar), scaled for Dynamic Type.
-    static func roundedUIFont(_ style: UIFont.TextStyle, weight: UIFont.Weight) -> UIFont {
-        let base = UIFont.preferredFont(forTextStyle: style)
-        let system = UIFont.systemFont(ofSize: base.pointSize, weight: weight)
-        guard let descriptor = system.fontDescriptor.withDesign(.rounded) else {
-            return system
-        }
-        return UIFont(descriptor: descriptor, size: base.pointSize)
-    }
-
-    /// Navigation bar in the theme: background color, rounded titles, no hairline.
-    @MainActor
-    static func configureNavigationBar() {
-        let appearance = UINavigationBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = Palette.background.uiColor
-        appearance.shadowColor = .clear
-        appearance.titleTextAttributes = [
-            .foregroundColor: Palette.text.uiColor,
-            .font: roundedUIFont(.headline, weight: .bold),
-        ]
-        appearance.largeTitleTextAttributes = [
-            .foregroundColor: Palette.text.uiColor,
-            .font: roundedUIFont(.largeTitle, weight: .bold),
-        ]
-        let navigationBar = UINavigationBar.appearance()
-        navigationBar.standardAppearance = appearance
-        navigationBar.scrollEdgeAppearance = appearance
-        navigationBar.compactAppearance = appearance
-        navigationBar.tintColor = Palette.accentInk.uiColor
     }
 }
 

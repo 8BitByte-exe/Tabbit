@@ -8,8 +8,8 @@ struct TabbitApp: App {
     @StateObject private var flow: ReceiptFlow
 
     init() {
-        Theme.configureNavigationBar()
-
+        // No global UINavigationBar styling: screens draw their own clay headers, and a
+        // global appearance would also paint a bar into VisionKit's document camera.
         let store: TabbitStore
         #if DEBUG
         if DemoMode.isEnabled {
@@ -54,6 +54,7 @@ struct RootView: View {
     @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsWhatsNew = false
+    @State private var errorDialog: ClayDialog?
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -91,7 +92,7 @@ struct RootView: View {
             }
         }
         .animation(reduceMotion ? nil : Theme.Motion.standard, value: router.isAtRoot)
-        .tint(Theme.Colors.accentInk)
+        .tint(Theme.Colors.text)
         .sheet(isPresented: $flow.isChoosingSource, onDismiss: {
             flow.sourceSheetDismissed()
         }, content: {
@@ -104,6 +105,7 @@ struct RootView: View {
                 flow.handle(outcome)
             })
             .ignoresSafeArea()
+            .background(Color.black.ignoresSafeArea())
         }
         .photosPicker(isPresented: $flow.isShowingPhotoPicker, selection: $flow.photoSelection,
                       maxSelectionCount: 5, selectionBehavior: .ordered, matching: .images)
@@ -123,13 +125,14 @@ struct RootView: View {
         .overlay {
             phaseOverlay
         }
-        .alert("Something went wrong", isPresented: errorBinding, actions: {
-            Button("OK", role: .cancel) {
+        .clayDialog($errorDialog)
+        .onChange(of: store.lastError) { _, message in
+            if let message = message {
+                errorDialog = ClayDialog(title: "Something went wrong", message: message, actions: [],
+                                         cancelTitle: "OK")
                 store.lastError = nil
             }
-        }, message: {
-            Text(store.lastError ?? "")
-        })
+        }
         .sensoryFeedback(.selection, trigger: router.tab)
         .preferredColorScheme(appearance.colorScheme)
         .onAppear {
@@ -144,16 +147,6 @@ struct RootView: View {
             .opacity(isSelected ? 1 : 0)
             .allowsHitTesting(isSelected)
             .accessibilityHidden(!isSelected)
-    }
-
-    private var errorBinding: Binding<Bool> {
-        return Binding(get: {
-            store.lastError != nil
-        }, set: { isShowing in
-            if !isShowing {
-                store.lastError = nil
-            }
-        })
     }
 
     @ViewBuilder
@@ -245,7 +238,7 @@ struct ClayTabBar: View {
                 }
             }
         }, label: {
-            Image(systemName: tab.symbol)
+            icon(for: tab)
                 .font(.system(size: 20, weight: .semibold, design: .rounded))
                 .foregroundStyle(isSelected ? Theme.Colors.onAccent : Theme.Colors.secondaryText)
                 .frame(maxWidth: .infinity)
@@ -263,6 +256,15 @@ struct ClayTabBar: View {
         .accessibilityLabel(tab.title)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
+
+    @ViewBuilder
+    private func icon(for tab: AppTab) -> some View {
+        if tab == .receipts {
+            ReceiptIcon(size: 20)
+        } else {
+            Image(systemName: tab.symbol)
+        }
+    }
 }
 
 /// Shown while a scan is being read.
@@ -274,13 +276,13 @@ struct ProcessingOverlay: View {
             Theme.Colors.background
                 .opacity(reduceTransparency ? 1 : 0.92)
                 .ignoresSafeArea()
-            NeumorphicCard {
+            InfoCard {
                 VStack(spacing: Theme.Spacing.l) {
                     ProgressView()
                         .controlSize(.large)
-                        .tint(Theme.Colors.accentInk)
+                        .tint(Theme.Colors.onAccent)
                         .frame(width: 72, height: 72)
-                        .clayInset(cornerRadius: 36)
+                        .background(Circle().fill(Theme.Colors.accentHigh))
                     Text("Reading your receipt…")
                         .font(Theme.Fonts.headline)
                         .foregroundStyle(Theme.Colors.text)
@@ -310,12 +312,9 @@ struct ErrorOverlay: View {
             Theme.Colors.background
                 .opacity(reduceTransparency ? 1 : 0.92)
                 .ignoresSafeArea()
-            NeumorphicCard {
+            InfoCard {
                 VStack(spacing: Theme.Spacing.l) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(Theme.Fonts.largeTitle)
-                        .foregroundStyle(Theme.Colors.warning)
-                        .accessibilityHidden(true)
+                    IconBadge(symbol: "exclamationmark.triangle.fill", tone: .caution, size: 64)
                     Text("Something went wrong")
                         .font(Theme.Fonts.headline)
                         .foregroundStyle(Theme.Colors.text)

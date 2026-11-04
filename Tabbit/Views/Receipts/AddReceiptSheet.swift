@@ -41,17 +41,7 @@ struct AddReceiptSheet: View {
             flow.choose(source)
         }, label: {
             VStack(spacing: Theme.Spacing.s) {
-                Image(systemName: symbol)
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
-                    .foregroundStyle(source == .camera ? Theme.Colors.onAccent : Theme.Colors.accentInk)
-                    .frame(width: 60, height: 60)
-                    .background {
-                        if source == .camera {
-                            ClayBackground(shape: Circle(), style: .accent, elevation: Theme.Elevations.small)
-                        } else {
-                            ClayBackground(shape: Circle(), style: .inset)
-                        }
-                    }
+                IconBadge(symbol: symbol, tone: source == .camera ? .positive : .neutral, size: 60)
                 Text(title)
                     .font(Theme.Fonts.headline)
                     .foregroundStyle(Theme.Colors.text)
@@ -59,7 +49,7 @@ struct AddReceiptSheet: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, Theme.Spacing.s)
         })
-        .buttonStyle(NeumorphicCardButtonStyle(padding: Theme.Spacing.m))
+        .buttonStyle(NeumorphicCardButtonStyle(padding: Theme.Spacing.m, showsChevron: false))
         .accessibilityLabel(title)
         .accessibilityHint(hint)
     }
