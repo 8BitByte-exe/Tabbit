@@ -77,6 +77,10 @@ enum Theme {
         static let swipeEdit = Swatch(light: 0x2E7A57, dark: 0x2E7A57)
         static let swipeMove = Swatch(light: 0x3F6699, dark: 0x3F6699)
         static let swipeDelete = Swatch(light: 0xB23A2C, dark: 0xB23A2C)
+
+        /// Solid chart fills: the highlighted bar, and the others (a soft green, never translucent grey).
+        static let chartHighlight = Swatch(light: 0x5CCB96, dark: 0x7ADDAD)
+        static let chartMuted = Swatch(light: 0xC9E8D8, dark: 0x3F5E4F)
     }
 
     /// Shorthand for the SwiftUI colors.
@@ -101,6 +105,8 @@ enum Theme {
         static let swipeEdit = Palette.swipeEdit.color
         static let swipeMove = Palette.swipeMove.color
         static let swipeDelete = Palette.swipeDelete.color
+        static let chartHighlight = Palette.chartHighlight.color
+        static let chartMuted = Palette.chartMuted.color
     }
 
     enum Gradients {

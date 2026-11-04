@@ -201,7 +201,9 @@ struct ReceiptEditorView: View {
             return "Check the marked fields against the paper receipt."
         }
         let names = missing.map { field in ReceiptEditorView.name(of: field) }
-        return "Couldn't read the \(names.joined(separator: ", ")). Add them if you can."
+        let list = ListFormatter.localizedString(byJoining: names)
+        let pronoun = missing.count == 1 && missing[0] != .items ? "it" : "them"
+        return "Couldn't read the \(list). Add \(pronoun) if you can."
     }
 
     static func name(of field: ReceiptField) -> String {

@@ -272,11 +272,13 @@ struct MonthsChartCard: View {
         return month.formatted(.dateTime.month(.abbreviated))
     }
 
-    private func style(for month: SpendingStats.MonthTotal) -> AnyShapeStyle {
+    /// Solid colors: Swift Charts stretches gradients over the whole plot, and
+    /// translucent fills turn muddy on the dark card.
+    private func style(for month: SpendingStats.MonthTotal) -> Color {
         if month.id == stats.months.last?.id {
-            return AnyShapeStyle(Theme.Gradients.accent)
+            return Theme.Colors.chartHighlight
         }
-        return AnyShapeStyle(Theme.pastel(0).opacity(0.55))
+        return Theme.Colors.chartMuted
     }
 
     private var accessibilitySummary: String {
