@@ -29,14 +29,20 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: "$(APP_BUNDLE_ID)"
-        MARKETING_VERSION: "0.3.0"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "0.4.0"
+        CURRENT_PROJECT_VERSION: "4"
+        # Tabbit/Assets.xcassets/AppIcon.appiconset (made by Design/AppIcon/make_app_icon.py)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
         # Swift 5 language mode keeps concurrency checking lenient on newer Xcode.
         SWIFT_VERSION: "5.0"
         IPHONEOS_DEPLOYMENT_TARGET: "16.0"
         # iPhone only.
         TARGETED_DEVICE_FAMILY: "1"
+      configs:
+        # Debug builds (simulator tests and CI screenshots) include DemoMode.
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
     info:
       path: Tabbit/Info.plist
       properties:

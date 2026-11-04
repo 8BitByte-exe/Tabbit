@@ -72,9 +72,12 @@ jobs:
 
   # Runs in parallel with the build, so the IPA is still produced if a test fails.
   test:
-    name: Unit tests (iPhone simulator)
+    name: Unit tests + screenshots (iPhone simulator)
     runs-on: macos-latest
     timeout-minutes: 30
+    # Write access only to push the design screenshots to the ci-screenshots branch.
+    permissions:
+      contents: write
 
     steps:
       - name: Check out
@@ -120,3 +123,59 @@ jobs:
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO
+
+      # Design previews without a Mac: launch the Debug build in demo mode on the
+      # simulator and capture each screen in light and dark mode.
+      - name: Capture design screenshots
+        if: ${{ !cancelled() }}
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          APP="build/DerivedData/Build/Products/Debug-iphonesimulator/Tabbit.app"
+          if [ ! -d "$APP" ]; then
+            echo "No simulator build found; skipping screenshots."
+            exit 0
+          fi
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP/Info.plist")
+          xcrun simctl boot "$UDID" 2>/dev/null || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 || true
+          xcrun simctl install "$UDID" "$APP"
+          mkdir -p screenshots
+          for appearance in light dark; do
+            xcrun simctl ui "$UDID" appearance "$appearance"
+            for screen in home detail detail-bottom edit empty settings processing; do
+              xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+              xcrun simctl launch "$UDID" "$BUNDLE_ID" -TabbitDemo -TabbitScreen "$screen"
+              sleep 5
+              xcrun simctl io "$UDID" screenshot "screenshots/$screen-$appearance.png"
+            done
+          done
+          ls -l screenshots
+
+      - name: Upload screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: design-screenshots
+          path: screenshots
+          if-no-files-found: ignore
+
+      - name: Publish screenshots to the ci-screenshots branch
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -d screenshots ] || [ -z "$(ls -A screenshots)" ]; then
+            echo "No screenshots to publish."
+            exit 0
+          fi
+          cd screenshots
+          printf "Screenshots for %s (%s)\n" "$GITHUB_SHA" "$GITHUB_REF_NAME" > README.md
+          git init -q
+          git checkout -q -b ci-screenshots
+          git add .
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Screenshots for ${GITHUB_SHA::7} [skip ci]"
+          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-screenshots
+          echo "Published to the ci-screenshots branch."

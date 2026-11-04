@@ -70,3 +70,99 @@ struct Receipt: Equatable, Codable {
         return lineItems.reduce(Decimal(0)) { sum, item in sum + item.amount }
     }
 }
+
+// MARK: - JSON
+
+/// Money is written to JSON as text ("7.76"), so saved receipts never pick up
+/// floating-point rounding. Older files that stored plain numbers still load.
+enum MoneyCoding {
+    private static let posix = Locale(identifier: "en_US_POSIX")
+
+    static func text(_ value: Decimal) -> String {
+        return NSDecimalNumber(decimal: value).stringValue
+    }
+
+    static func decode<Key: CodingKey>(_ container: KeyedDecodingContainer<Key>, forKey key: Key) throws -> Decimal {
+        if let text = try? container.decode(String.self, forKey: key) {
+            guard let value = Decimal(string: text, locale: posix) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: key, in: container, debugDescription: "Not an amount: \(text)")
+            }
+            return value
+        }
+        return try container.decode(Decimal.self, forKey: key)
+    }
+
+    static func decodeIfPresent<Key: CodingKey>(_ container: KeyedDecodingContainer<Key>,
+                                                forKey key: Key) throws -> Decimal? {
+        guard container.contains(key) else {
+            return nil
+        }
+        if try container.decodeNil(forKey: key) {
+            return nil
+        }
+        return try decode(container, forKey: key)
+    }
+}
+
+extension ReceiptLineItem {
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case amount
+        case confidence
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let name = try container.decode(String.self, forKey: .name)
+        let amount = try MoneyCoding.decode(container, forKey: .amount)
+        let confidence = try container.decodeIfPresent(Float.self, forKey: .confidence)
+        self.init(name: name, amount: amount, confidence: confidence)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(MoneyCoding.text(amount), forKey: .amount)
+        try container.encodeIfPresent(confidence, forKey: .confidence)
+    }
+}
+
+extension Receipt {
+    private enum CodingKeys: String, CodingKey {
+        case merchant
+        case date
+        case lineItems
+        case subtotal
+        case tax
+        case total
+        case parser
+        case notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            merchant: try container.decodeIfPresent(String.self, forKey: .merchant),
+            date: try container.decodeIfPresent(CalendarDate.self, forKey: .date),
+            lineItems: try container.decodeIfPresent([ReceiptLineItem].self, forKey: .lineItems) ?? [],
+            subtotal: try MoneyCoding.decodeIfPresent(container, forKey: .subtotal),
+            tax: try MoneyCoding.decodeIfPresent(container, forKey: .tax),
+            total: try MoneyCoding.decodeIfPresent(container, forKey: .total),
+            parser: try container.decodeIfPresent(ReceiptParserKind.self, forKey: .parser) ?? .rules,
+            notes: try container.decodeIfPresent([String].self, forKey: .notes) ?? []
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(merchant, forKey: .merchant)
+        try container.encodeIfPresent(date, forKey: .date)
+        try container.encode(lineItems, forKey: .lineItems)
+        try container.encodeIfPresent(subtotal.map { value in MoneyCoding.text(value) }, forKey: .subtotal)
+        try container.encodeIfPresent(tax.map { value in MoneyCoding.text(value) }, forKey: .tax)
+        try container.encodeIfPresent(total.map { value in MoneyCoding.text(value) }, forKey: .total)
+        try container.encode(parser, forKey: .parser)
+        try container.encode(notes, forKey: .notes)
+    }
+}
