@@ -1,10 +1,12 @@
 import SwiftUI
 import UIKit
 
-/// Tabbit's design tokens: soft, tactile, clay-like surfaces lit from the top-left.
+/// Tabbit's design tokens: soft, matte, clay-like surfaces lit from the top-left,
+/// with a calm mint-sage green for money and primary actions.
 ///
-/// Every color, radius, spacing, shadow and font used by the views lives here.
-/// Views use the components in Components.swift instead of repeating shadow code.
+/// Every color, radius, spacing, shadow, font and animation used by the views
+/// lives here. Views use the components in Components.swift instead of
+/// repeating shadow code.
 enum Theme {
 
     // MARK: - Palette
@@ -19,13 +21,7 @@ enum Theme {
 
         /// The SwiftUI color, switching automatically with light/dark mode.
         var color: Color {
-            let swatch = self
-            return Color(uiColor: UIColor { traits in
-                if traits.userInterfaceStyle == .dark {
-                    return Theme.uiColor(hex: swatch.dark, opacity: swatch.darkOpacity)
-                }
-                return Theme.uiColor(hex: swatch.light, opacity: swatch.lightOpacity)
-            })
+            return Color(uiColor: uiColor)
         }
 
         var uiColor: UIColor {
@@ -39,76 +35,119 @@ enum Theme {
         }
     }
 
-    /// All colors. Text colors pass WCAG AA (4.5:1) on every surface below in both
+    /// All colors. Text colors pass WCAG AA (4.5:1) on every surface in both
     /// modes; ThemeContrastTests checks this in CI.
     enum Palette {
-        // Surfaces
-        static let background = Swatch(light: 0xE6EAF0, dark: 0x2A2D34)
-        /// Top and bottom of the puffy clay gradient on raised surfaces.
-        static let surfaceTop = Swatch(light: 0xEEF1F5, dark: 0x31353D)
-        static let surfaceBottom = Swatch(light: 0xE0E5EC, dark: 0x282B31)
-        /// Pressed-in wells: text fields, selected segments, pressed buttons.
-        static let inset = Swatch(light: 0xDCE1E8, dark: 0x24272D)
+        // Surfaces: a faint green-grey tint, so the whole app feels calm.
+        static let background = Swatch(light: 0xE9EEEB, dark: 0x222725)
+        /// Raised surfaces fade from `surfaceHigh` (top-left, toward the light)
+        /// to `surfaceLow` (bottom-right): matte, never glossy.
+        static let surfaceHigh = Swatch(light: 0xF2F6F3, dark: 0x2A302D)
+        static let surfaceLow = Swatch(light: 0xE3E9E5, dark: 0x1F2422)
+        /// Pressed-in wells: fields, tracks, selected segments, pressed buttons.
+        static let inset = Swatch(light: 0xDEE5E0, dark: 0x1B201E)
 
         // Text and icons
-        static let text = Swatch(light: 0x2E3440, dark: 0xECEFF4)
-        static let secondaryText = Swatch(light: 0x586273, dark: 0xA9B1BE)
+        static let text = Swatch(light: 0x22302B, dark: 0xE6EEE9)
+        static let secondaryText = Swatch(light: 0x51615A, dark: 0xA0AFA8)
 
-        // Accent: soft coral. Fills use the gradient with dark text on top;
-        // coral-colored text and icons use `accentInk`, which is deeper in light mode.
-        static let accentTop = Swatch(light: 0xFF9A85, dark: 0xFF9A85)
-        static let accentBottom = Swatch(light: 0xF57C64, dark: 0xF57C64)
-        static let onAccent = Swatch(light: 0x2E3440, dark: 0x2A2D34)
-        static let accentInk = Swatch(light: 0xA63A26, dark: 0xFF8A73)
+        // Accent: mint-sage. Fills use the gradient with dark text on top;
+        // green text and icons use `accentInk`.
+        static let accentHigh = Swatch(light: 0xA8EECB, dark: 0xA8EECB)
+        static let accentLow = Swatch(light: 0x6ED6A4, dark: 0x6ED6A4)
+        static let onAccent = Swatch(light: 0x14251D, dark: 0x12221A)
+        static let accentInk = Swatch(light: 0x1B6844, dark: 0x8FE5BC)
+        /// Shadows under green buttons are tinted green, so the color stays clean.
+        static let accentShade = Swatch(light: 0x3FA877, dark: 0x0B1E15, lightOpacity: 0.42, darkOpacity: 0.9)
 
-        // Status (always paired with an icon and a label)
-        static let success = Swatch(light: 0x27693F, dark: 0x7FD39B)
-        static let warning = Swatch(light: 0x865700, dark: 0xF2B65A)
+        // Status (always paired with an icon or label)
+        static let warning = Swatch(light: 0x835400, dark: 0xF0B85C)
+        static let danger = Swatch(light: 0xA1352A, dark: 0xFF9C8F)
 
         // Lighting: one light source at the top-left.
-        static let highlight = Swatch(light: 0xFFFFFF, dark: 0x3C4049, lightOpacity: 0.8, darkOpacity: 0.7)
-        static let shade = Swatch(light: 0xA3B1C6, dark: 0x15171B, lightOpacity: 0.5, darkOpacity: 0.7)
-        /// A visible edge for Reduce Transparency / Increase Contrast, where soft shadows aren't enough.
-        static let outline = Swatch(light: 0x9AA5B5, dark: 0x5A616E)
+        static let highlight = Swatch(light: 0xFFFFFF, dark: 0x333A36, lightOpacity: 0.95, darkOpacity: 0.85)
+        static let shade = Swatch(light: 0xA6B8AF, dark: 0x101412, lightOpacity: 0.6, darkOpacity: 0.8)
+        /// A crisp 1pt edge on the lit side of raised surfaces.
+        static let edge = Swatch(light: 0xFFFFFF, dark: 0x3B4440, lightOpacity: 0.8, darkOpacity: 0.7)
+        /// A visible outline for Reduce Transparency / Increase Contrast.
+        static let outline = Swatch(light: 0x8FA097, dark: 0x5A6862)
+
+        // Swipe-action fills. iOS draws their icons and labels in white, so these
+        // stay dark enough for 4.5:1 in both modes.
+        static let swipeEdit = Swatch(light: 0x2E7A57, dark: 0x2E7A57)
+        static let swipeMove = Swatch(light: 0x3F6699, dark: 0x3F6699)
+        static let swipeDelete = Swatch(light: 0xB23A2C, dark: 0xB23A2C)
     }
 
     /// Shorthand for the SwiftUI colors.
     enum Colors {
         static let background = Palette.background.color
-        static let surfaceTop = Palette.surfaceTop.color
-        static let surfaceBottom = Palette.surfaceBottom.color
+        static let surfaceHigh = Palette.surfaceHigh.color
+        static let surfaceLow = Palette.surfaceLow.color
         static let inset = Palette.inset.color
         static let text = Palette.text.color
         static let secondaryText = Palette.secondaryText.color
-        static let accentTop = Palette.accentTop.color
-        static let accentBottom = Palette.accentBottom.color
+        static let accentHigh = Palette.accentHigh.color
+        static let accentLow = Palette.accentLow.color
         static let onAccent = Palette.onAccent.color
         static let accentInk = Palette.accentInk.color
-        static let success = Palette.success.color
+        static let accentShade = Palette.accentShade.color
         static let warning = Palette.warning.color
+        static let danger = Palette.danger.color
         static let highlight = Palette.highlight.color
         static let shade = Palette.shade.color
+        static let edge = Palette.edge.color
         static let outline = Palette.outline.color
+        static let swipeEdit = Palette.swipeEdit.color
+        static let swipeMove = Palette.swipeMove.color
+        static let swipeDelete = Palette.swipeDelete.color
     }
 
     enum Gradients {
-        /// The puffy top-to-bottom gradient on raised surfaces.
+        /// Matte surface: lighter toward the light (top-left), a touch darker away from it.
         static let surface = LinearGradient(
-            colors: [Colors.surfaceTop, Colors.surfaceBottom], startPoint: .top, endPoint: .bottom)
+            colors: [Colors.surfaceHigh, Colors.surfaceLow], startPoint: .topLeading, endPoint: .bottomTrailing)
         static let accent = LinearGradient(
-            colors: [Colors.accentTop, Colors.accentBottom], startPoint: .top, endPoint: .bottom)
+            colors: [Colors.accentHigh, Colors.accentLow], startPoint: .topLeading, endPoint: .bottomTrailing)
+        /// The crisp lit edge, fading out before the shaded side.
+        static let edge = LinearGradient(
+            colors: [Colors.edge, Color.clear], startPoint: .topLeading, endPoint: .center)
+    }
+
+    /// Soft pastel fills (avatars, category badges, chart segments). Dark text
+    /// (`onPastel`) on any of them is at least 8:1.
+    static let pastels: [Swatch] = [
+        Swatch(light: 0xB9E8CF, dark: 0x9CD9B9),
+        Swatch(light: 0xBFD9F5, dark: 0xA3C6EC),
+        Swatch(light: 0xF6D3B5, dark: 0xEDC09B),
+        Swatch(light: 0xE6CCF2, dark: 0xD5B5E6),
+        Swatch(light: 0xF5C9CF, dark: 0xEBB0B9),
+        Swatch(light: 0xD6E4B0, dark: 0xC3D594),
+        Swatch(light: 0xC3EEEA, dark: 0xA6DFD9),
+        Swatch(light: 0xF2E2A8, dark: 0xE6D18A),
+        // Neutral, for "Other".
+        Swatch(light: 0xD9E0DC, dark: 0xBFC9C3),
+    ]
+
+    /// Text on pastel fills (both modes).
+    static let onPastel = Swatch(light: 0x1E2B25, dark: 0x1E2B25)
+
+    static func pastel(_ index: Int) -> Color {
+        let count = pastels.count
+        return pastels[((index % count) + count) % count].color
     }
 
     // MARK: - Shape
 
     enum Radius {
-        static let card: CGFloat = 30
-        static let button: CGFloat = 24
-        static let field: CGFloat = 20
-        static let small: CGFloat = 14
+        static let card: CGFloat = 28
+        static let tile: CGFloat = 20
+        static let field: CGFloat = 18
+        static let small: CGFloat = 12
     }
 
     enum Spacing {
+        static let xxs: CGFloat = 2
         static let xs: CGFloat = 4
         static let s: CGFloat = 8
         static let m: CGFloat = 12
@@ -120,31 +159,31 @@ enum Theme {
     }
 
     enum Size {
-        /// Minimum height of buttons.
         static let buttonHeight: CGFloat = 56
+        static let compactButtonHeight: CGFloat = 44
         /// Minimum tap target (Apple's guideline is 44pt).
         static let tapTarget: CGFloat = 48
-        static let fieldHeight: CGFloat = 48
+        static let fieldHeight: CGFloat = 50
+        static let tabBarHeight: CGFloat = 68
     }
 
     // MARK: - Shadows
 
     /// A drop-shadow pair: highlight toward the top-left, shade toward the bottom-right.
     struct Elevation {
-        /// Offset of each shadow, in points.
         let offset: CGFloat
         /// SwiftUI shadow radius (about half of a design tool's "blur").
         let radius: CGFloat
     }
 
     enum Elevations {
-        /// Cards: offset 8, blur ~16.
-        static let card = Elevation(offset: 8, radius: 8)
-        /// Buttons and small controls.
-        static let control = Elevation(offset: 5, radius: 5)
+        static let card = Elevation(offset: 7, radius: 10)
+        static let control = Elevation(offset: 5, radius: 7)
+        static let floating = Elevation(offset: 8, radius: 14)
+        static let small = Elevation(offset: 3, radius: 4)
     }
 
-    /// Inner highlight/shadow used for the clay edge and for inset wells.
+    /// Inner shadow used by inset wells.
     enum Inner {
         static let lineWidth: CGFloat = 6
         static let blur: CGFloat = 4
@@ -154,7 +193,11 @@ enum Theme {
     // MARK: - Motion
 
     enum Motion {
-        static let press = Animation.easeOut(duration: 0.15)
+        /// Press feedback: quick, slightly springy.
+        static let press = Animation.spring(response: 0.25, dampingFraction: 0.7)
+        /// Appearing/disappearing content and value changes.
+        static let standard = Animation.snappy(duration: 0.3)
+        static let bouncy = Animation.bouncy(duration: 0.4)
         static let pressedScale: CGFloat = 0.97
     }
 
@@ -163,13 +206,16 @@ enum Theme {
     enum Fonts {
         static let largeTitle = Font.system(.largeTitle, design: .rounded).weight(.bold)
         static let title = Font.system(.title2, design: .rounded).weight(.bold)
+        static let title3 = Font.system(.title3, design: .rounded).weight(.semibold)
         static let headline = Font.system(.headline, design: .rounded).weight(.semibold)
         static let body = Font.system(.body, design: .rounded).weight(.medium)
         static let callout = Font.system(.callout, design: .rounded).weight(.medium)
-        static let caption = Font.system(.caption, design: .rounded).weight(.medium)
+        static let subheadline = Font.system(.subheadline, design: .rounded).weight(.medium)
+        static let caption = Font.system(.caption, design: .rounded).weight(.semibold)
         static let button = Font.system(.headline, design: .rounded).weight(.bold)
         static let money = Font.system(.body, design: .rounded).weight(.semibold).monospacedDigit()
-        static let bigMoney = Font.system(.title, design: .rounded).weight(.bold).monospacedDigit()
+        static let bigMoney = Font.system(.largeTitle, design: .rounded).weight(.bold).monospacedDigit()
+        static let mediumMoney = Font.system(.title2, design: .rounded).weight(.bold).monospacedDigit()
         static let mono = Font.system(.footnote, design: .monospaced)
     }
 
@@ -193,7 +239,6 @@ enum Theme {
     }
 
     /// Navigation bar in the theme: background color, rounded titles, no hairline.
-    /// Call once at launch.
     @MainActor
     static func configureNavigationBar() {
         let appearance = UINavigationBarAppearance()
@@ -216,6 +261,41 @@ enum Theme {
     }
 }
 
+/// Light / dark / follow the system. Stored in UserDefaults.
+enum AppearanceSetting: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    static let storageKey = "appearance"
+
+    var id: String { rawValue }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .system: return "circle.lefthalf.filled"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.fill"
+        }
+    }
+}
+
 /// WCAG contrast math, used by the contrast unit tests.
 enum ContrastMath {
     /// Relative luminance of an sRGB color (0 = black, 1 = white).
@@ -235,7 +315,7 @@ enum ContrastMath {
     }
 }
 
-/// Soft haptics for presses and saves.
+/// Haptics for presses, saves and swipes.
 enum Haptics {
     @MainActor
     static func soft() {
@@ -245,5 +325,10 @@ enum Haptics {
     @MainActor
     static func success() {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    @MainActor
+    static func selection() {
+        UISelectionFeedbackGenerator().selectionChanged()
     }
 }

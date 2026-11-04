@@ -58,12 +58,14 @@ struct RulesReceiptParser {
         })
         let taxLines = Array(lines[0..<(firstTotalIndex ?? lines.count)])
         let tax = RulesReceiptParser.findTax(in: taxLines, notes: &notes)
+        let tip = RulesReceiptParser.firstAmount(in: lines, role: .tip)
+        let fees = (tax ?? Decimal(0)) + (tip ?? Decimal(0))
 
         var candidates = RulesReceiptParser.itemCandidates(in: lines)
 
         if subtotal == nil {
             let totals = RulesReceiptParser.totalAmounts(in: lines)
-            if let inferred = RulesReceiptParser.inferSubtotal(from: &candidates, tax: tax, totals: totals) {
+            if let inferred = RulesReceiptParser.inferSubtotal(from: &candidates, tax: fees, totals: totals) {
                 subtotal = inferred.value
                 notes.append("Read \"\(inferred.label)\" as the subtotal, because it equals the items above it.")
             }
@@ -72,9 +74,9 @@ struct RulesReceiptParser {
         // What the total should be, if the receipt adds up.
         var expectedTotal: Decimal?
         if let subtotal = subtotal {
-            expectedTotal = subtotal + (tax ?? Decimal(0))
+            expectedTotal = subtotal + fees
         } else if candidates.contains(where: { candidate in candidate.included }) {
-            expectedTotal = RulesReceiptParser.includedSum(candidates) + (tax ?? Decimal(0))
+            expectedTotal = RulesReceiptParser.includedSum(candidates) + fees
         }
         let total = RulesReceiptParser.findTotal(in: lines, expected: expectedTotal)
 
@@ -84,7 +86,7 @@ struct RulesReceiptParser {
                 notes.append(note)
             }
         } else if let total = total {
-            let target = total - (tax ?? Decimal(0))
+            let target = total - fees
             if let note = RulesReceiptParser.reconcile(&candidates, target: target, targetName: "total") {
                 notes.append(note)
             }
@@ -101,6 +103,7 @@ struct RulesReceiptParser {
             subtotal: subtotal,
             tax: tax,
             total: total,
+            tip: tip,
             parser: .rules,
             notes: notes
         )
@@ -225,7 +228,7 @@ struct RulesReceiptParser {
             }
             let above = lineAbove
             lineAbove = nil
-            if line.role == .payment || line.role == .notATotal {
+            if line.role == .payment || line.role == .notATotal || line.role == .tip {
                 continue
             }
 

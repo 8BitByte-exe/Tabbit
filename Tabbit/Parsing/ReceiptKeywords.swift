@@ -11,7 +11,9 @@ enum ReceiptLineRole: Equatable {
     case total
     /// "TOTAL SAVINGS", "TOTAL ITEMS" and similar: not the amount paid.
     case notATotal
-    /// Card, cash, change, tip and similar lines.
+    /// "TIP", "GRATUITY", "SERVICE CHARGE".
+    case tip
+    /// Card, cash, change and similar lines.
     case payment
     /// Price information that usually isn't a separate purchase:
     /// "REG PRICE 4.99", "YOU SAVE 1.00", "CLUB CARD SAVINGS". With a negative
@@ -114,7 +116,7 @@ enum ReceiptKeywords {
     private static let paymentWords: Set<String> = [
         "CHANGE", "CASH", "TEND", "TENDER", "TENDERED", "VISA", "MASTERCARD", "AMEX",
         "DISCOVER", "DEBIT", "CREDIT", "PAYMENT", "PAID", "AUTH", "APPROVAL", "APPROVED",
-        "ACCOUNT", "ACCT", "REFUND", "TIP", "GRATUITY", "POINTS", "REWARDS", "EBT",
+        "ACCOUNT", "ACCT", "REFUND", "POINTS", "REWARDS", "EBT",
     ]
 
     private static let infoWords = [
@@ -162,6 +164,9 @@ enum ReceiptKeywords {
         if hasTotal {
             return .total
         }
+        if isTip(words) {
+            return .tip
+        }
         if words.contains(where: { word in paymentWords.contains(word) }) {
             return .payment
         }
@@ -182,6 +187,19 @@ enum ReceiptKeywords {
                 if word.count <= 4 && (isLike(joined, "SUBTOTAL") || joined == "SUBTTL") {
                     return true
                 }
+            }
+        }
+        return false
+    }
+
+    /// "TIP", "GRATUITY", "SERVICE CHARGE" (but not "TIPS SUGGESTED" style guides with a %).
+    private static func isTip(_ words: [String]) -> Bool {
+        if words.contains(where: { word in word == "TIP" || word == "TIPS" || isLike(word, "GRATUITY") }) {
+            return !words.contains("SUGGESTED")
+        }
+        for index in 0..<max(words.count - 1, 0) where isLike(words[index], "SERVICE") {
+            if isLike(words[index + 1], "CHARGE") {
+                return true
             }
         }
         return false

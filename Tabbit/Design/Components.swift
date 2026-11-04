@@ -2,9 +2,8 @@ import SwiftUI
 
 // MARK: - Surfaces
 
-/// A blurred stroke clipped to the inside of `shape`. It shows on the edge
-/// *opposite* to `offset`: an offset toward the bottom-right lights or shades the
-/// top-left inner edge. This is how inner shadows are drawn on iOS 16.
+/// A blurred stroke clipped to the inside of `shape`: an inner shadow on the
+/// edge *opposite* to `offset`. Used only by inset wells (pressed look).
 struct InnerEdge<S: Shape>: View {
     let shape: S
     let color: Color
@@ -19,37 +18,41 @@ struct InnerEdge<S: Shape>: View {
     }
 }
 
-/// The clay surface behind a card, button or field.
+/// The clay surface behind a card, button or field. Matte, lit from the top-left.
 ///
-/// - `.raised`: puffy gradient, a thin highlight on the top-left inner edge, a soft
-///   shade on the bottom-right inner edge, and two drop shadows (light to the
-///   top-left, dark to the bottom-right).
-/// - `.inset`: pressed into the background, with the inner shade on the top-left
-///   and the highlight on the bottom-right.
+/// - `.raised`: a subtle diagonal gradient, a crisp 1pt lit edge, and two soft
+///   drop shadows (light to the top-left, dark to the bottom-right).
+/// - `.accent`: the same, in mint-sage, with a green-tinted shadow so the color
+///   stays clean (no grey shading on the color).
+/// - `.inset` / `.accentInset`: pressed into the surface, with inner shadows.
 ///
-/// With Reduce Transparency the blurred edges are dropped, and with Reduce
-/// Transparency or Increase Contrast a visible outline is added, so edges never
-/// depend on soft shadows alone.
+/// Reduce Transparency drops the blurred inner shadows; Reduce Transparency or
+/// Increase Contrast adds a visible outline, so edges never depend on shadows alone.
 struct ClayBackground<S: Shape>: View {
     enum Style {
         case raised
+        case accent
         case inset
+        case accentInset
     }
 
     let shape: S
     var style: Style = .raised
-    var raisedFill: LinearGradient = Theme.Gradients.surface
-    var insetFill: Color = Theme.Colors.inset
     var elevation: Theme.Elevation = Theme.Elevations.card
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        if style == .raised {
-            raised
-        } else {
-            inset
+        switch style {
+        case .raised:
+            raised(fill: Theme.Gradients.surface, shade: Theme.Colors.shade)
+        case .accent:
+            raised(fill: Theme.Gradients.accent, shade: Theme.Colors.accentShade)
+        case .inset:
+            inset(fill: Theme.Colors.inset, shade: Theme.Colors.shade)
+        case .accentInset:
+            inset(fill: Theme.Colors.accentLow, shade: Theme.Colors.accentShade)
         }
     }
 
@@ -57,27 +60,24 @@ struct ClayBackground<S: Shape>: View {
         return reduceTransparency || contrast == .increased
     }
 
-    private var raised: some View {
+    private func raised(fill: LinearGradient, shade: Color) -> some View {
         ZStack {
-            shape.fill(raisedFill)
-            if !reduceTransparency {
-                InnerEdge(shape: shape, color: Theme.Colors.highlight, offset: Theme.Inner.offset)
-                InnerEdge(shape: shape, color: Theme.Colors.shade, offset: -Theme.Inner.offset)
-            }
+            shape.fill(fill)
+            shape.stroke(Theme.Gradients.edge, lineWidth: 1)
             if showsOutline {
                 shape.stroke(Theme.Colors.outline, lineWidth: 1)
             }
         }
         .compositingGroup()
-        .shadow(color: Theme.Colors.shade, radius: elevation.radius, x: elevation.offset, y: elevation.offset)
+        .shadow(color: shade, radius: elevation.radius, x: elevation.offset, y: elevation.offset)
         .shadow(color: Theme.Colors.highlight, radius: elevation.radius, x: -elevation.offset, y: -elevation.offset)
     }
 
-    private var inset: some View {
+    private func inset(fill: Color, shade: Color) -> some View {
         ZStack {
-            shape.fill(insetFill)
+            shape.fill(fill)
             if !reduceTransparency {
-                InnerEdge(shape: shape, color: Theme.Colors.shade, offset: Theme.Inner.offset)
+                InnerEdge(shape: shape, color: shade, offset: Theme.Inner.offset)
                 InnerEdge(shape: shape, color: Theme.Colors.highlight, offset: -Theme.Inner.offset)
             }
             if showsOutline {
@@ -108,6 +108,17 @@ extension View {
     func themedScreen() -> some View {
         background(Theme.Colors.background.ignoresSafeArea())
     }
+
+    /// An inset text-field well.
+    func insetField() -> some View {
+        self
+            .font(Theme.Fonts.body)
+            .foregroundStyle(Theme.Colors.text)
+            .tint(Theme.Colors.accentInk)
+            .padding(.horizontal, Theme.Spacing.l)
+            .frame(minHeight: Theme.Size.fieldHeight)
+            .clayInset(cornerRadius: Theme.Radius.field)
+    }
 }
 
 // MARK: - Cards
@@ -117,7 +128,7 @@ struct NeumorphicCard<Content: View>: View {
     private let padding: CGFloat
     private let content: Content
 
-    init(padding: CGFloat = Theme.Spacing.xl, @ViewBuilder content: () -> Content) {
+    init(padding: CGFloat = Theme.Spacing.l + 4, @ViewBuilder content: () -> Content) {
         self.padding = padding
         self.content = content()
     }
@@ -130,7 +141,7 @@ struct NeumorphicCard<Content: View>: View {
     }
 }
 
-/// The inset variant: content sits in a well pressed into the background.
+/// The inset variant: content sits in a well pressed into the surface.
 struct NeumorphicInsetCard<Content: View>: View {
     private let padding: CGFloat
     private let content: Content
@@ -144,26 +155,28 @@ struct NeumorphicInsetCard<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .clayInset(cornerRadius: Theme.Radius.card)
+            .clayInset(cornerRadius: Theme.Radius.tile)
     }
 }
 
 // MARK: - Buttons
 
-/// Chunky capsule buttons. Primary = coral with dark text; secondary = surface color.
-/// Pressed: switches to the inset look, scales to 0.97, soft haptic. Reduce Motion
-/// turns off the scale animation.
+/// Chunky capsule buttons. Primary = mint-sage with dark text; secondary = surface;
+/// destructive = surface with red text. Pressed: inset look, 0.97 scale, soft haptic.
 struct NeumorphicButtonStyle: ButtonStyle {
     enum Prominence {
         case primary
         case secondary
+        case destructive
     }
 
     var prominence: Prominence = .secondary
     var fullWidth: Bool = true
+    var compact: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
-        NeumorphicButtonBody(configuration: configuration, prominence: prominence, fullWidth: fullWidth)
+        NeumorphicButtonBody(configuration: configuration, prominence: prominence,
+                             fullWidth: fullWidth, compact: compact)
     }
 }
 
@@ -171,6 +184,7 @@ private struct NeumorphicButtonBody: View {
     let configuration: ButtonStyleConfiguration
     let prominence: NeumorphicButtonStyle.Prominence
     let fullWidth: Bool
+    let compact: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled
@@ -178,188 +192,414 @@ private struct NeumorphicButtonBody: View {
     var body: some View {
         let pressed = configuration.isPressed
         let isPrimary = prominence == .primary
+        let style: ClayBackground<Capsule>.Style = isPrimary
+            ? (pressed ? .accentInset : .accent)
+            : (pressed ? .inset : .raised)
         return configuration.label
-            .font(Theme.Fonts.button)
-            .foregroundColor(isPrimary ? Theme.Colors.onAccent : Theme.Colors.text)
-            .padding(.horizontal, Theme.Spacing.xl)
-            .padding(.vertical, Theme.Spacing.m)
-            .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: Theme.Size.buttonHeight)
+            .font(compact ? Theme.Fonts.subheadline.weight(.bold) : Theme.Fonts.button)
+            .foregroundStyle(foreground)
+            .padding(.horizontal, compact ? Theme.Spacing.l : Theme.Spacing.xl)
+            .padding(.vertical, compact ? Theme.Spacing.s : Theme.Spacing.m)
+            .frame(maxWidth: fullWidth ? .infinity : nil,
+                   minHeight: compact ? Theme.Size.compactButtonHeight : Theme.Size.buttonHeight)
             .background {
-                ClayBackground(
-                    shape: Capsule(style: .continuous),
-                    style: pressed ? .inset : .raised,
-                    raisedFill: isPrimary ? Theme.Gradients.accent : Theme.Gradients.surface,
-                    insetFill: isPrimary ? Theme.Colors.accentBottom : Theme.Colors.inset,
-                    elevation: Theme.Elevations.control
-                )
+                ClayBackground(shape: Capsule(style: .continuous), style: style,
+                               elevation: compact ? Theme.Elevations.small : Theme.Elevations.control)
             }
             .contentShape(Capsule(style: .continuous))
             .scaleEffect(pressed && !reduceMotion ? Theme.Motion.pressedScale : 1)
             .animation(reduceMotion ? nil : Theme.Motion.press, value: pressed)
-            .opacity(isEnabled ? 1 : 0.55)
-            .onChange(of: pressed) { isPressed in
-                if isPressed {
-                    Haptics.soft()
-                }
-            }
+            .opacity(isEnabled ? 1 : 0.5)
+            .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: pressed) { _, isDown in isDown }
+    }
+
+    private var foreground: Color {
+        switch prominence {
+        case .primary: return Theme.Colors.onAccent
+        case .secondary: return Theme.Colors.text
+        case .destructive: return Theme.Colors.danger
+        }
     }
 }
 
-/// Round 48pt icon buttons (settings, delete, add).
+/// Round icon buttons. `.accent` is the green floating "add" button.
 struct NeumorphicIconButtonStyle: ButtonStyle {
+    enum Prominence {
+        case plain
+        case accent
+    }
+
+    var prominence: Prominence = .plain
+    var size: CGFloat = Theme.Size.tapTarget
     var tint: Color = Theme.Colors.text
 
     func makeBody(configuration: Configuration) -> some View {
-        NeumorphicIconButtonBody(configuration: configuration, tint: tint)
+        NeumorphicIconButtonBody(configuration: configuration, prominence: prominence, size: size, tint: tint)
     }
 }
 
 private struct NeumorphicIconButtonBody: View {
     let configuration: ButtonStyleConfiguration
+    let prominence: NeumorphicIconButtonStyle.Prominence
+    let size: CGFloat
     let tint: Color
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let pressed = configuration.isPressed
+        let isAccent = prominence == .accent
+        let style: ClayBackground<Circle>.Style = isAccent
+            ? (pressed ? .accentInset : .accent)
+            : (pressed ? .inset : .raised)
         return configuration.label
-            .font(Theme.Fonts.headline)
-            .foregroundColor(tint)
-            .frame(minWidth: Theme.Size.tapTarget, minHeight: Theme.Size.tapTarget)
+            .font(size > 52 ? Theme.Fonts.title3.weight(.bold) : Theme.Fonts.headline)
+            .foregroundStyle(isAccent ? Theme.Colors.onAccent : tint)
+            .frame(width: size, height: size)
             .background {
-                ClayBackground(shape: Circle(), style: pressed ? .inset : .raised,
-                               elevation: Theme.Elevations.control)
+                ClayBackground(shape: Circle(), style: style,
+                               elevation: size > 52 ? Theme.Elevations.floating : Theme.Elevations.control)
             }
             .contentShape(Circle())
             .scaleEffect(pressed && !reduceMotion ? Theme.Motion.pressedScale : 1)
             .animation(reduceMotion ? nil : Theme.Motion.press, value: pressed)
-            .onChange(of: pressed) { isPressed in
-                if isPressed {
-                    Haptics.soft()
-                }
-            }
+            .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: pressed) { _, isDown in isDown }
     }
 }
 
-/// Makes a whole card tappable (used for receipt cards on the home screen).
+/// Makes a whole card tappable: it sinks in while pressed.
 struct NeumorphicCardButtonStyle: ButtonStyle {
+    var padding: CGFloat = Theme.Spacing.l
+
     func makeBody(configuration: Configuration) -> some View {
-        NeumorphicCardButtonBody(configuration: configuration)
+        NeumorphicCardButtonBody(configuration: configuration, padding: padding)
     }
 }
 
 private struct NeumorphicCardButtonBody: View {
     let configuration: ButtonStyleConfiguration
+    let padding: CGFloat
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let pressed = configuration.isPressed
         return configuration.label
-            .padding(Theme.Spacing.l)
+            .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 ClayBackground(shape: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous),
                                style: pressed ? .inset : .raised)
             }
             .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-            .scaleEffect(pressed && !reduceMotion ? Theme.Motion.pressedScale : 1)
+            .scaleEffect(pressed && !reduceMotion ? 0.985 : 1)
             .animation(reduceMotion ? nil : Theme.Motion.press, value: pressed)
-            .onChange(of: pressed) { isPressed in
-                if isPressed {
-                    Haptics.soft()
+    }
+}
+
+/// A small pill (filters, assignees, "Everyone").
+struct ClayChipStyle: ButtonStyle {
+    var isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.Fonts.subheadline.weight(.semibold))
+            .foregroundStyle(isSelected ? Theme.Colors.onAccent : Theme.Colors.text)
+            .padding(.horizontal, Theme.Spacing.m)
+            .frame(minHeight: 40)
+            .background {
+                ClayBackground(shape: Capsule(style: .continuous),
+                               style: isSelected
+                                   ? (configuration.isPressed ? .accentInset : .accent)
+                                   : (configuration.isPressed ? .inset : .raised),
+                               elevation: Theme.Elevations.small)
+            }
+            .contentShape(Capsule(style: .continuous))
+            .sensoryFeedback(.selection, trigger: isSelected)
+    }
+}
+
+// MARK: - Controls
+
+/// A clay switch: inset track, raised knob; green when on.
+struct ClayToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        ClayToggleBody(configuration: configuration)
+    }
+}
+
+private struct ClayToggleBody: View {
+    let configuration: ToggleStyleConfiguration
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: {
+            if reduceMotion {
+                configuration.isOn.toggle()
+            } else {
+                withAnimation(Theme.Motion.press) {
+                    configuration.isOn.toggle()
                 }
             }
+        }, label: {
+            HStack(spacing: Theme.Spacing.m) {
+                configuration.label
+                    .font(Theme.Fonts.body)
+                    .foregroundStyle(Theme.Colors.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+                    ClayBackground(shape: Capsule(style: .continuous),
+                                   style: configuration.isOn ? .accentInset : .inset)
+                        .frame(width: 58, height: 34)
+                    Circle()
+                        .fill(Theme.Gradients.surface)
+                        .overlay(Circle().stroke(Theme.Gradients.edge, lineWidth: 1))
+                        .shadow(color: Theme.Colors.shade, radius: 3, x: 2, y: 2)
+                        .frame(width: 26, height: 26)
+                        .padding(4)
+                }
+            }
+            .frame(minHeight: Theme.Size.tapTarget)
+            .contentShape(Rectangle())
+        })
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: configuration.isOn)
+        .accessibilityRepresentation {
+            Toggle(isOn: configuration.$isOn) {
+                configuration.label
+            }
+        }
     }
 }
 
-// MARK: - Fields and labels
+/// A clay segmented control: an inset track with a raised thumb on the selection.
+struct ClaySegmentedPicker<Value: Hashable>: View {
+    struct Option {
+        let value: Value
+        let title: String?
+        let symbol: String?
+        let accessibilityName: String
+    }
 
-extension View {
-    /// An inset text-field well: 20pt corners, at least 48pt tall.
-    func insetField() -> some View {
-        self
-            .font(Theme.Fonts.body)
-            .foregroundColor(Theme.Colors.text)
-            .padding(.horizontal, Theme.Spacing.l)
-            .frame(minHeight: Theme.Size.fieldHeight)
-            .clayInset(cornerRadius: Theme.Radius.field)
+    @Binding var selection: Value
+    let options: [Option]
+
+    @Namespace private var namespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            ForEach(options.indices, id: \.self) { index in
+                segment(options[index])
+            }
+        }
+        .padding(Theme.Spacing.xs)
+        .clayInset(cornerRadius: 22)
+    }
+
+    private func segment(_ option: Option) -> some View {
+        let isSelected = option.value == selection
+        return Button(action: {
+            if reduceMotion {
+                selection = option.value
+            } else {
+                withAnimation(Theme.Motion.standard) {
+                    selection = option.value
+                }
+            }
+        }, label: {
+            HStack(spacing: Theme.Spacing.xs) {
+                if let symbol = option.symbol {
+                    Image(systemName: symbol)
+                }
+                if let title = option.title {
+                    Text(title)
+                }
+            }
+            .font(Theme.Fonts.subheadline.weight(.bold))
+            .foregroundStyle(isSelected ? Theme.Colors.accentInk : Theme.Colors.secondaryText)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background {
+                if isSelected {
+                    ClayBackground(shape: Capsule(style: .continuous), style: .raised,
+                                   elevation: Theme.Elevations.small)
+                        .matchedGeometryEffect(id: "thumb", in: namespace)
+                }
+            }
+            .contentShape(Capsule(style: .continuous))
+        })
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.accessibilityName)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .sensoryFeedback(.selection, trigger: isSelected)
     }
 }
 
-/// A small section title above or inside a card.
+/// A search well with a magnifying glass and a clear button.
+struct ClaySearchField: View {
+    @Binding var text: String
+    var prompt: String = "Search"
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.s) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .accessibilityHidden(true)
+            TextField(prompt, text: $text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+            if !text.isEmpty {
+                Button(action: {
+                    text = ""
+                }, label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .frame(width: 32, height: 32)
+                })
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .insetField()
+    }
+}
+
+// MARK: - Labels and badges
+
+/// A small section title.
 struct SectionLabel: View {
     let title: String
 
     var body: some View {
         Text(title)
             .font(Theme.Fonts.caption)
-            .foregroundColor(Theme.Colors.secondaryText)
+            .foregroundStyle(Theme.Colors.secondaryText)
             .textCase(.uppercase)
             .accessibilityAddTraits(.isHeader)
     }
 }
 
-/// Whether a receipt's numbers add up, as an icon + label + color (never color alone).
-struct StatusChip: View {
-    enum Status {
-        case addsUp
-        case needsCheck
-        case unknown
-    }
+/// A person's initials on a pastel circle.
+struct AvatarView: View {
+    let person: Person
+    var size: CGFloat = 36
 
-    let status: Status
+    var body: some View {
+        Text(person.initials)
+            .font(.system(size: size * 0.4, weight: .bold, design: .rounded))
+            .foregroundStyle(Theme.onPastel.color)
+            .frame(width: size, height: size)
+            .background(Circle().fill(Theme.pastel(person.colorIndex)))
+            .overlay(Circle().stroke(Theme.Colors.edge, lineWidth: 1))
+            .accessibilityLabel(person.name)
+    }
+}
+
+/// Overlapping avatars with a "+N" for the rest.
+struct AvatarStack: View {
+    let people: [Person]
+    var size: CGFloat = 28
+    var limit: Int = 4
+
+    var body: some View {
+        HStack(spacing: -size * 0.3) {
+            ForEach(Array(people.prefix(limit))) { person in
+                AvatarView(person: person, size: size)
+                    .overlay(Circle().stroke(Theme.Colors.surfaceHigh, lineWidth: 2))
+            }
+            if people.count > limit {
+                Text("+\(people.count - limit)")
+                    .font(.system(size: size * 0.36, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .frame(width: size, height: size)
+                    .background(Circle().fill(Theme.Colors.inset))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(people.count) people")
+    }
+}
+
+/// A category icon on a pastel tile.
+struct CategoryBadge: View {
+    let symbol: String
+    let colorIndex: Int
+    var size: CGFloat = 44
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
+            .foregroundStyle(Theme.onPastel.color)
+            .frame(width: size, height: size)
+            .background(
+                RoundedRectangle(cornerRadius: size * 0.32, style: .continuous)
+                    .fill(Theme.pastel(colorIndex))
+            )
+            .accessibilityHidden(true)
+    }
+}
+
+/// An icon + label + color chip (never color alone).
+struct StatusChip: View {
+    let title: String
+    let symbol: String
+    let tint: Color
 
     var body: some View {
         Label {
             Text(title)
-                .font(Theme.Fonts.caption)
         } icon: {
             Image(systemName: symbol)
-                .font(Theme.Fonts.caption)
         }
-        .foregroundColor(color)
+        .font(Theme.Fonts.caption)
+        .foregroundStyle(tint)
         .padding(.horizontal, Theme.Spacing.m)
         .padding(.vertical, Theme.Spacing.xs + 2)
         .clayInset(cornerRadius: Theme.Radius.small)
         .accessibilityElement(children: .combine)
     }
+}
 
-    private var title: String {
-        switch status {
-        case .addsUp: return "Adds up"
-        case .needsCheck: return "Check totals"
-        case .unknown: return "Not checked"
-        }
-    }
+/// A friendly empty state: an icon in a well, a title and one line of text.
+struct EmptyStateView: View {
+    let symbol: String
+    let title: String
+    let message: String
 
-    private var symbol: String {
-        switch status {
-        case .addsUp: return "checkmark.circle.fill"
-        case .needsCheck: return "exclamationmark.triangle.fill"
-        case .unknown: return "questionmark.circle"
+    var body: some View {
+        VStack(spacing: Theme.Spacing.l) {
+            Image(systemName: symbol)
+                .font(.system(size: 38, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.Colors.accentInk)
+                .frame(width: 96, height: 96)
+                .clayInset(cornerRadius: 48)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(Theme.Fonts.title3)
+                .foregroundStyle(Theme.Colors.text)
+            Text(message)
+                .font(Theme.Fonts.callout)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .multilineTextAlignment(.center)
         }
-    }
-
-    private var color: Color {
-        switch status {
-        case .addsUp: return Theme.Colors.success
-        case .needsCheck: return Theme.Colors.warning
-        case .unknown: return Theme.Colors.secondaryText
-        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.xxl)
+        .accessibilityElement(children: .combine)
     }
 }
 
-extension StatusChip.Status {
-    /// Status from the receipt's arithmetic checks.
-    init(receipt: Receipt) {
-        let checks = ReceiptValidator.checks(for: receipt)
-        if checks.isEmpty {
-            self = .unknown
-        } else if checks.allSatisfy({ check in check.passed }) {
-            self = .addsUp
-        } else {
-            self = .needsCheck
-        }
+/// A big money figure that rolls smoothly when it changes.
+struct MoneyText: View {
+    let amount: Decimal
+    var font: Font = Theme.Fonts.money
+    var color: Color = Theme.Colors.text
+
+    var body: some View {
+        Text(Money.string(amount))
+            .font(font)
+            .foregroundStyle(color)
+            .contentTransition(.numericText())
     }
 }

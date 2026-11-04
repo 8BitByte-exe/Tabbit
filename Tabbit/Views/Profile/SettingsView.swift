@@ -1,0 +1,215 @@
+import SwiftUI
+
+/// Settings: appearance, scanning, storage, CSV export, What's New and privacy.
+struct SettingsView: View {
+    @EnvironmentObject private var store: TabbitStore
+
+    @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
+    @AppStorage(OCRSettings.languageCorrectionKey) private var languageCorrection: Bool = false
+    @State private var usage: StorageUsage?
+    @State private var shareFile: ShareFile?
+    @State private var showsWhatsNew = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                section("Appearance") {
+                    ClaySegmentedPicker(selection: $appearance, options: AppearanceSetting.allCases.map { option in
+                        ClaySegmentedPicker<AppearanceSetting>.Option(value: option, title: option.title,
+                                                                      symbol: option.symbol,
+                                                                      accessibilityName: option.title)
+                    })
+                }
+
+                section("Scanning") {
+                    Toggle(isOn: $languageCorrection) {
+                        Text("Correct words while reading")
+                    }
+                    .toggleStyle(ClayToggleStyle())
+                    Text("Swaps letters the scanner isn't sure about for dictionary words. Can turn abbreviations like “BNLS CHKN” into other words, so it's off by default.")
+                        .font(Theme.Fonts.caption)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                section("Your data") {
+                    storageMeter
+                    Button(action: exportCSV) {
+                        Label("Export All Receipts (CSV)", systemImage: "tablecells")
+                    }
+                    .buttonStyle(NeumorphicButtonStyle(prominence: .secondary, compact: true))
+                    .disabled(store.receipts.isEmpty)
+                }
+
+                section("About") {
+                    Button(action: {
+                        showsWhatsNew = true
+                    }, label: {
+                        HStack {
+                            Label("What's New", systemImage: "sparkles")
+                                .foregroundStyle(Theme.Colors.text)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                        }
+                        .font(Theme.Fonts.body)
+                        .frame(minHeight: Theme.Size.tapTarget)
+                        .contentShape(Rectangle())
+                    })
+                    .buttonStyle(.plain)
+                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                        Label("Scanning, reading and splitting happen on this iPhone.", systemImage: "iphone")
+                        Label("Receipts and photos are stored only here, encrypted while the phone is locked, and left out of iCloud Backup.",
+                              systemImage: "lock.fill")
+                        Label("Nothing leaves your phone unless you share or export it.",
+                              systemImage: "square.and.arrow.up")
+                    }
+                    .font(Theme.Fonts.callout)
+                    .foregroundStyle(Theme.Colors.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Text(versionText)
+                    .font(Theme.Fonts.caption)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, Theme.Spacing.screen)
+            .padding(.vertical, Theme.Spacing.l)
+        }
+        .themedScreen()
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            usage = store.storageUsage()
+        }
+        .sheet(item: $shareFile) { file in
+            ActivityView(items: [file.url])
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showsWhatsNew) {
+            WhatsNewView()
+        }
+    }
+
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            SectionLabel(title: title)
+            NeumorphicCard {
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    content()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var storageMeter: some View {
+        if let usage = usage {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                HStack {
+                    Text("Tabbit uses \(StorageUsage.format(usage.appBytes))")
+                        .font(Theme.Fonts.body)
+                        .foregroundStyle(Theme.Colors.text)
+                    Spacer()
+                    Text("\(store.receipts.count) receipts")
+                        .font(Theme.Fonts.caption)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+                if let total = usage.deviceTotalBytes, let free = usage.deviceFreeBytes, total > 0 {
+                    let used = Double(max(total - free, 0)) / Double(total)
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            ClayBackground(shape: Capsule(style: .continuous), style: .inset)
+                            Capsule(style: .continuous)
+                                .fill(Theme.Gradients.accent)
+                                .frame(width: max(geometry.size.width * used, 14))
+                                .padding(3)
+                        }
+                    }
+                    .frame(height: 20)
+                    .accessibilityHidden(true)
+                    Text("iPhone: \(StorageUsage.format(free)) free of \(StorageUsage.format(total))")
+                        .font(Theme.Fonts.caption)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
+                Text("Photos \(StorageUsage.format(usage.photoBytes)) · Receipts and groups \(StorageUsage.format(usage.dataBytes))")
+                    .font(Theme.Fonts.caption)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            ProgressView()
+                .tint(Theme.Colors.accentInk)
+        }
+    }
+
+    private func exportCSV() {
+        if let url = CSVExporter.write(receipts: store.receipts, groups: store.groups, me: store.me) {
+            shareFile = ShareFile(url: url)
+        } else {
+            store.lastError = "Couldn't create the CSV file."
+        }
+    }
+
+    private var versionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "Tabbit \(version) (\(build))"
+    }
+}
+
+/// The changelog, newest first.
+struct WhatsNewView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                SheetHeader(title: "What's New", onClose: {
+                    dismiss()
+                })
+                ForEach(Changelog.entries) { entry in
+                    NeumorphicCard {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(entry.title)
+                                    .font(Theme.Fonts.title3)
+                                    .foregroundStyle(Theme.Colors.text)
+                                Spacer()
+                                Text("Version \(entry.version)")
+                                    .font(Theme.Fonts.caption)
+                                    .foregroundStyle(Theme.Colors.secondaryText)
+                            }
+                            ForEach(entry.highlights.indices, id: \.self) { index in
+                                let highlight = entry.highlights[index]
+                                HStack(alignment: .top, spacing: Theme.Spacing.m) {
+                                    Image(systemName: highlight.symbol)
+                                        .font(Theme.Fonts.headline)
+                                        .foregroundStyle(Theme.Colors.accentInk)
+                                        .frame(width: 28)
+                                        .accessibilityHidden(true)
+                                    Text(highlight.text)
+                                        .font(Theme.Fonts.callout)
+                                        .foregroundStyle(Theme.Colors.text)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                    }
+                }
+                Button(action: {
+                    dismiss()
+                }, label: {
+                    Text("Continue")
+                })
+                .buttonStyle(NeumorphicButtonStyle(prominence: .primary))
+            }
+            .padding(.horizontal, Theme.Spacing.screen)
+            .padding(.vertical, Theme.Spacing.xl)
+        }
+        .themedScreen()
+        .presentationDetents([.large])
+        .claySheet()
+    }
+}
