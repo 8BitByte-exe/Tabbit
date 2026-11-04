@@ -98,12 +98,12 @@ struct RulesReceiptParser {
                 tax = nil
                 fees -= foundTax
                 total = matching
-                notes.append("The prices already include \(MoneyCoding.text(foundTax)) tax, so it isn't added again.")
+                notes.append("The prices already include \(MoneyInput.editText(foundTax)) tax, so it isn't added again.")
             }
         }
         if let included = RulesReceiptParser.firstAmount(in: lines, role: .includedTax), tax == nil {
             if !notes.contains(where: { note in note.hasPrefix("The prices already include") }) {
-                notes.append("The prices already include \(MoneyCoding.text(included)) tax.")
+                notes.append("The prices already include \(MoneyInput.editText(included)) tax.")
             }
         }
 

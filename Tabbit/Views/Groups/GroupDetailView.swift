@@ -214,7 +214,8 @@ struct ReceiptRow: View {
                     Text(receipt.displayTitle)
                         .font(Theme.Fonts.headline)
                         .foregroundStyle(Theme.Colors.text)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     if receipt.pageImageCount > 0 {
                         Image(systemName: "photo")
                             .font(Theme.Fonts.caption)
