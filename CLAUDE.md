@@ -42,13 +42,15 @@ Tabbit/
   TabbitApp.swift            @main App (store, router, flow); RootView: tabs kept alive in a ZStack,
                              ClayTabBar, add/scan/photo/editor presentations, processing/error overlays
   Design/
+    AppearanceApplier.swift  Light/Dark/System applied to the window with a cross-fade (no preferredColorScheme)
     Theme.swift              ALL design tokens: palette (light/dark hex), gradients, pastels, radii,
                              spacing, sizes, elevations, fonts (SF Rounded), motion,
                              AppearanceSetting, ContrastMath, Haptics
     Components.swift         ClayBackground (.raised/.accent/.inset/.accentInset/.plate, pressed),
-                             InnerShading, InfoCard/InsetCard, button styles (capsule, icon, card,
-                             chip), ClayToggleStyle, ClaySegmentedPicker, ClaySearchField, FlowLayout,
-                             Expandable, SwipeRow, SectionLabel, AvatarView/Stack, CategoryBadge,
+                             InnerShading, InfoCard/InsetCard, ClayTapButton + SwipeTapGate, button
+                             styles (capsule, icon, card, chip, plain), ClayToggleStyle,
+                             ClaySegmentedPicker, ClaySearchField, FlowLayout, Expandable, SwipeRow,
+                             SwipeToConfirm, SectionLabel, AvatarView/Stack, CategoryBadge,
                              IconBadge, StatusPill, EmptyStateView, MoneyText, ReceiptIcon
   Models/
     Person.swift             Person (me has the fixed Person.meID), displayName ("You")
@@ -70,6 +72,12 @@ Tabbit/
     CSVExporter.swift        one row per item, RFC 4180 escaping
     ScanAutofill.swift       ProcessedScan → ReceiptRecord with marks; CategoryGuesser
     AppInfo.swift            Changelog (What's New), StorageUsage
+  Intelligence/              Apple Intelligence (roadmap tier 1), all on-device
+    ReceiptIntelligence.swift  status (IntelligenceStatus), Settings toggle, refine(ProcessedScan), timeout
+    AppleIntelligenceReader.swift  FoundationModels only (#if canImport, iOS 26): @Generable receipt, session
+    ModelReceiptVerifier.swift ModelReceiptDraft (plain Swift), ScanEvidence, the checks that decide
+                               between the model's reading and the rules' (fully unit-tested)
+    ReceiptPrompt.swift        instructions + the receipt's lines as the prompt
   Storage/
     TabbitStore.swift        @MainActor store: Application Support/Receipts/{profile.json, groups.json,
                              <id>/receipt.json, page-N.jpg, thumbnail.jpg}; no iCloud Backup; complete
@@ -147,7 +155,11 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Questions and choices use `ClayDialog` (`.clayDialog($dialog)`), not `alert` / `confirmationDialog` / `Menu`.
   - Dates use `DatePickerSheet` (wheel), not the compact picker.
   - Don't set a global `UINavigationBar.appearance()`: it also paints a bar into VisionKit's document camera.
-- **Lists** are `ScrollView` + `LazyVStack`. Rows with edit/move/delete are `SwipeRow` (slides left to reveal clay buttons, plus accessibility actions), not `List.swipeActions`.
+- **Buttons** use the clay styles, which are `PrimitiveButtonStyle`s built on `ClayTapButton`:
+  - Every tap shows the pressed look for at least `Theme.Motion.minimumPress`, because inside a scroll view iOS reports quick taps too late for `isPressed` to show.
+  - Buttons inside `SwipeRow` / `SwipeToConfirm` ignore the tap that ends a swipe (`SwipeTapGate`); without this, releasing a swipe "tapped" the card and closed the row again. Use `ClayPlainButtonStyle` instead of `.plain` for plain buttons that sit inside a swipeable card.
+- **Light/dark:** never use `preferredColorScheme` or animate a color-scheme change in SwiftUI; `AppearanceApplier` cross-fades the window.
+- **Lists** are `ScrollView` + `LazyVStack`. Rows with edit/move/delete are `SwipeRow` (slides left to reveal clay buttons, plus accessibility actions), not `List.swipeActions`. One-action swipes (Settle Up: mark paid, undo) are `SwipeToConfirm` (swipe right past the threshold).
 - **Chips wrap** with `FlowLayout`, so they stay inside their card; no horizontal chip scrolling.
 - **Drop-downs** use `Expandable`, which measures the content and animates its height so the card grows in place.
 - **Accessibility:**
@@ -157,7 +169,7 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Respect Reduce Motion (no scale animation), Reduce Transparency (no blurred edges, add an outline) and Increase Contrast (outline).
   - Support Dynamic Type: use the text styles in `Theme.Fonts`, and switch the card layout at accessibility sizes.
   - Give every control an accessibility label.
-- **Screenshots:** the CI `test` job launches the Debug build with `-TabbitDemo -TabbitScreen <groups|group|swipe|receipt|settle|edit|category|add|mine|sort|profile|settings|whatsnew|processing|dialog|empty>` in light and dark mode. It uploads the `design-screenshots` artifact and force-pushes the PNGs to the **`ci-screenshots`** branch. To review them from this container: `git fetch origin ci-screenshots && git show origin/ci-screenshots:groups-light.png > /tmp/groups-light.png`, then open the PNG. Look at them after any UI change.
+- **Screenshots:** the CI `test` job launches the Debug build with `-TabbitDemo -TabbitScreen <groups|group|swipe|receipt|settle|edit|category|add|mine|sort|profile|profileedit|settings|whatsnew|processing|dialog|empty>` in light and dark mode. It uploads the `design-screenshots` artifact and force-pushes the PNGs to the **`ci-screenshots`** branch. To review them from this container: `git fetch origin ci-screenshots && git show origin/ci-screenshots:groups-light.png > /tmp/groups-light.png`, then open the PNG. Look at them after any UI change.
 
 ## Storage
 
@@ -212,11 +224,10 @@ The design is tiered and entirely on-device. Each phone gets the best tier it su
 2. **Done:** Export button, rules parser (tier 3), arithmetic checks, unit tests in CI, "Parsed with" label.
    - **Done:** accuracy pass after the first real-world test (v0.3): tilt handling, fuzzy keywords, sale/deal lines, reconciliation, OCR settings, uncertain-name marks, redacted exports.
    - Next: real exported receipts as fixtures.
-3. **Next:** iOS 26 tiers.
-   - Vision's document reader.
-   - Foundation Models with a `@Generable` receipt type. Guard with `#if canImport(FoundationModels)`, `@available(iOS 26, *)` and `SystemLanguageModel.default.availability`.
-   - Validate the model's numbers: the arithmetic checks, and every amount must appear in the OCR text. Fall back to the rules result when they fail.
-   - The model can only be tested on the phone; CI runners most likely can't run Apple Intelligence.
+3. **In progress:** iOS 26 tiers.
+   - **Done (v1.1):** Foundation Models (tier 1). `AppleIntelligenceReader` fills a `@Generable` receipt from the rebuilt lines; `ModelReceiptVerifier` accepts it only if every amount is printed on the scan, every item matches scan text and `ReceiptValidator` passes; otherwise the rules result is kept with a note. The model's store name and category are used when they're on the receipt either way. 25 s timeout. Settings has a status row and an on/off toggle. `ReceiptParserKind.appleIntelligence` marks receipts it read.
+   - Next: Vision's document reader (`RecognizeDocumentsRequest`, tier 2) for better rows and amounts.
+   - The model can only be tested on the phone; CI runners can't run Apple Intelligence, so tests feed `ModelReceiptDraft`s to the verifier.
 4. **Done:** saving with editing (v0.4): design system, saved receipts, editable receipt screen, on-device storage with photos.
 5. **Done (v1.0):** splitting.
    - Groups, people, item assignment, tax/tip fees, Settle Up with Mark Paid, My Receipts with search and sort.

@@ -31,6 +31,14 @@ struct ProfileView: View {
             ProfileEditSheet()
                 .environmentObject(store)
         }
+        .task {
+            #if DEBUG
+            if DemoMode.screen == "profileedit" {
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                editingProfile = true
+            }
+            #endif
+        }
     }
 
     private var header: some View {
@@ -292,67 +300,58 @@ struct ProfileEditSheet: View {
     @State private var name = ""
     @State private var colorIndex = 0
 
+    /// Two rows of six: twelve swatches in one row were wider than the screen,
+    /// which stretched the whole sheet.
+    private let swatchColumns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.s), count: 6)
+
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            SheetHeader(title: "Your profile", onClose: {
-                dismiss()
-            })
-            HStack {
-                Spacer()
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                SheetHeader(title: "Your profile", onClose: {
+                    dismiss()
+                })
                 AvatarView(person: Person(id: Person.meID, name: name.isEmpty ? "Me" : name, colorIndex: colorIndex),
                            size: 88)
                     .padding(Theme.Spacing.s)
                     .clayPlate(cornerRadius: 52)
-                Spacer()
-            }
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                SectionLabel(title: "Name")
-                TextField("Your name", text: $name)
-                    .textInputAutocapitalization(.words)
-                    .insetField()
-                    .accessibilityLabel("Your name")
-                Text("Shown to friends when you share a Settle Up summary.")
-                    .font(Theme.Fonts.caption)
-                    .foregroundStyle(Theme.Colors.secondaryText)
-            }
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                SectionLabel(title: "Color")
-                HStack(spacing: Theme.Spacing.s) {
-                    ForEach(Theme.pastels.indices, id: \.self) { index in
-                        Button(action: {
-                            colorIndex = index
-                        }, label: {
-                            Circle()
-                                .fill(Theme.pastel(index))
-                                .frame(width: 30, height: 30)
-                                .overlay {
-                                    if index == colorIndex {
-                                        Image(systemName: "checkmark")
-                                            .font(Theme.Fonts.caption.weight(.heavy))
-                                            .foregroundStyle(Theme.onPastel.color)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, minHeight: Theme.Size.tapTarget)
-                                .contentShape(Rectangle())
-                        })
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Color \(index + 1)")
-                        .accessibilityAddTraits(index == colorIndex ? [.isSelected] : [])
-                    }
+                    .frame(maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    SectionLabel(title: "Name")
+                    TextField("Your name", text: $name)
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .insetField()
+                        .accessibilityLabel("Your name")
+                    Text("Shown to friends when you share a Settle Up summary.")
+                        .font(Theme.Fonts.caption)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    SectionLabel(title: "Color")
+                    LazyVGrid(columns: swatchColumns, spacing: Theme.Spacing.s) {
+                        ForEach(Theme.pastels.indices, id: \.self) { index in
+                            swatch(index)
+                        }
+                    }
+                    .padding(Theme.Spacing.s)
+                    .clayPlate(cornerRadius: Theme.Radius.tile)
+                    .sensoryFeedback(.selection, trigger: colorIndex)
+                }
+                Button(action: {
+                    store.updateMe(name: name, colorIndex: colorIndex)
+                    Haptics.success()
+                    dismiss()
+                }, label: {
+                    Label("Save", systemImage: "checkmark")
+                })
+                .buttonStyle(NeumorphicButtonStyle(prominence: .primary))
             }
-            Button(action: {
-                store.updateMe(name: name, colorIndex: colorIndex)
-                Haptics.success()
-                dismiss()
-            }, label: {
-                Label("Save", systemImage: "checkmark")
-            })
-            .buttonStyle(NeumorphicButtonStyle(prominence: .primary))
-            Spacer(minLength: 0)
+            .padding(.horizontal, Theme.Spacing.screen)
+            .padding(.top, Theme.Spacing.xl)
+            .padding(.bottom, Theme.Spacing.l)
         }
-        .padding(.horizontal, Theme.Spacing.screen)
-        .padding(.top, Theme.Spacing.xl)
+        .scrollDismissesKeyboard(.interactively)
         .themedScreen()
         .presentationDetents([.large])
         .claySheet()
@@ -360,5 +359,34 @@ struct ProfileEditSheet: View {
             name = store.me.name == "Me" ? "" : store.me.name
             colorIndex = store.me.colorIndex
         }
+    }
+
+    private func swatch(_ index: Int) -> some View {
+        let isSelected = index == colorIndex
+        return Button(action: {
+            colorIndex = index
+        }, label: {
+            Circle()
+                .fill(Theme.pastel(index))
+                .frame(width: 36, height: 36)
+                .overlay {
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(Theme.Fonts.caption.weight(.heavy))
+                            .foregroundStyle(Theme.onPastel.color)
+                    }
+                }
+                .padding(Theme.Spacing.xs)
+                .background {
+                    if isSelected {
+                        Circle().stroke(Theme.Colors.text, lineWidth: 2)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: Theme.Size.tapTarget)
+                .contentShape(Rectangle())
+        })
+        .buttonStyle(.plain)
+        .accessibilityLabel("Color \(index + 1)")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }

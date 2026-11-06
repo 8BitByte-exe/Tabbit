@@ -11,6 +11,13 @@ enum Changelog {
     }
 
     static let entries: [Entry] = [
+        Entry(version: "1.1", title: "Apple Intelligence", highlights: [
+            (symbol: "sparkles", text: "On iOS 26, Apple Intelligence reads your receipts: items, readable names, totals, the store and the category. It runs entirely on your iPhone."),
+            (symbol: "checkmark.shield.fill", text: "Every amount it reads is checked against the scan and must add up. If not, Tabbit uses its built-in rules."),
+            (symbol: "hand.draw.fill", text: "Swipe a payment right to mark it paid, and swipe again to undo."),
+            (symbol: "hand.tap.fill", text: "Buttons and cards press in on every tap, even quick ones, and swiped cards stay open."),
+            (symbol: "circle.lefthalf.filled", text: "Smoother switching between light and dark, and a tidier profile editor."),
+        ]),
         Entry(version: "1.0", title: "Split with friends", highlights: [
             (symbol: "person.3.fill", text: "Groups for trips, events and home, with everyone you share costs with."),
             (symbol: "checklist", text: "Assign each item to the people who had it. Tax and tip follow along."),

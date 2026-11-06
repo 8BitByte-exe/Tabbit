@@ -25,7 +25,8 @@ enum ScanAutofill {
             unreadable.insert(.date)
         }
 
-        let category = CategoryGuesser.guess(merchant: merchant, items: parsed.lineItems.map { item in item.name })
+        let category = CategoryGuesser.guess(merchant: merchant, items: parsed.lineItems.map { item in item.name },
+                                             suggestion: processed.suggestedCategory)
         if category != .other {
             autofilled.insert(.category)
         }
@@ -125,9 +126,14 @@ enum CategoryGuesser {
         (.shopping, ["store", "shop", "outlet", "mall", "target", "walmart", "amazon", "department", "books"]),
     ]
 
-    static func guess(merchant: String, items: [String]) -> SpendCategory {
+    /// A store name that names its category ("Joe's Pizza") wins; then Apple Intelligence's
+    /// suggestion, which understands the whole receipt; then keywords in the items.
+    static func guess(merchant: String, items: [String], suggestion: SpendCategory? = nil) -> SpendCategory {
         if let category = match(merchant) {
             return category
+        }
+        if let suggestion = suggestion, suggestion != .other {
+            return suggestion
         }
         return match(items.joined(separator: " ")) ?? .other
     }

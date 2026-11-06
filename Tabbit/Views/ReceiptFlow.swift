@@ -31,6 +31,8 @@ final class ReceiptFlow: ObservableObject {
     }
 
     @Published private(set) var phase: Phase = .idle
+    /// True while Apple Intelligence is reading the scan (shown on the processing overlay).
+    @Published private(set) var isUsingIntelligence: Bool = false
     /// The small "Scan / Photo / Type" sheet.
     @Published var isChoosingSource: Bool = false
     @Published var isShowingScanner: Bool = false
@@ -101,6 +103,7 @@ final class ReceiptFlow: ObservableObject {
     /// For CI screenshots of the processing overlay.
     func showProcessingForScreenshots() {
         phase = .processing
+        isUsingIntelligence = true
     }
     #endif
 
@@ -173,9 +176,16 @@ final class ReceiptFlow: ObservableObject {
         // OCR, parsing and photo compression run in a detached task so the UI stays responsive.
         Task {
             do {
-                let processed: ProcessedScan = try await Task.detached(priority: .userInitiated) {
+                var processed: ProcessedScan = try await Task.detached(priority: .userInitiated) {
                     return try ScanProcessor.process(images: images, options: options)
                 }.value
+                // Apple Intelligence (iOS 26, on-device), checked against the scan; keeps
+                // the rules result if it isn't available or doesn't check out.
+                if ReceiptIntelligence.willRun {
+                    self.isUsingIntelligence = true
+                    processed = await ReceiptIntelligence.refine(processed)
+                    self.isUsingIntelligence = false
+                }
                 let record = ScanAutofill.record(from: processed, source: source, groupID: groupID)
                 self.phase = .idle
                 self.session = EditorSession(record: record, pageJPEGs: processed.pageJPEGs,

@@ -25,6 +25,24 @@ enum AmountParser {
 
     private static let posix = Locale(identifier: "en_US_POSIX")
 
+    /// Every amount anywhere in `text`, as positive values ("-1.00" gives 1.00).
+    /// Used to check that numbers Apple Intelligence reports are really printed on the receipt.
+    static func allAmounts(in text: String) -> [Decimal] {
+        var values: [Decimal] = []
+        for match in amountPattern.allMatches(in: text) {
+            guard let wholePart = match.group(3, in: text), let cents = match.group(4, in: text) else {
+                continue
+            }
+            let digits = wholePart
+                .replacingOccurrences(of: ",", with: "")
+                .replacingOccurrences(of: ".", with: "")
+            if let value = Decimal(string: digits + "." + cents, locale: posix) {
+                values.append(value)
+            }
+        }
+        return values
+    }
+
     /// The amount at the end of `text`, if the text ends with one.
     static func trailingAmount(in text: String) -> ParsedAmount? {
         guard let match = amountPattern.allMatches(in: text).last else {

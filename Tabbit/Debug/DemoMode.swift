@@ -5,8 +5,8 @@ import UIKit
 /// Screenshot mode for CI (Debug builds only; the Release IPA doesn't contain it).
 ///
 /// Launch arguments: `-TabbitDemo -TabbitScreen <screen>`, where screen is one of
-/// groups, group, swipe, receipt, settle, edit, category, add, mine, sort, profile, settings,
-/// whatsnew, processing, dialog or empty. Sample data goes into a throwaway folder, never the real store.
+/// groups, group, swipe, receipt, settle, edit, category, add, mine, sort, profile, profileedit,
+/// settings, whatsnew, processing, dialog or empty. Sample data goes into a throwaway folder, never the real store.
 enum DemoMode {
 
     static var isEnabled: Bool {
@@ -155,7 +155,7 @@ enum DemoMode {
             flow.addReceipt(to: lisbonID)
         case "mine", "sort":
             router.tab = .receipts
-        case "profile":
+        case "profile", "profileedit":
             router.tab = .profile
         case "settings":
             router.tab = .profile

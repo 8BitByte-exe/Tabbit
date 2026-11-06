@@ -138,7 +138,7 @@ struct ReceiptDetailPage: View {
                 }
                 itemsCard
                 if let notes = receipt.parsed?.notes, !notes.isEmpty {
-                    notesCard(notes)
+                    notesCard(notes, parser: receipt.parsed?.parser ?? .rules)
                 }
             }
             .padding(.horizontal, Theme.Spacing.screen)
@@ -364,12 +364,14 @@ struct ReceiptDetailPage: View {
 
     // MARK: - Notes
 
-    private func notesCard(_ notes: [String]) -> some View {
-        InfoCard {
+    private func notesCard(_ notes: [String], parser: ReceiptParserKind) -> some View {
+        let usedModel = parser == .appleIntelligence
+        return InfoCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.s) {
-                    IconBadge(symbol: "text.viewfinder", tone: .neutral, size: 24)
-                    SectionLabel(title: "From the scan")
+                    IconBadge(symbol: usedModel ? "sparkles" : "text.viewfinder",
+                              tone: usedModel ? .positive : .neutral, size: 24)
+                    SectionLabel(title: usedModel ? "Read with Apple Intelligence" : "From the scan")
                 }
                 ForEach(notes, id: \.self) { note in
                     Text(note)

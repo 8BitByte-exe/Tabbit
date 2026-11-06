@@ -42,11 +42,15 @@ struct ReceiptLineItem: Equatable, Codable {
 enum ReceiptParserKind: String, Equatable, Codable {
     /// Hand-written rules (RulesReceiptParser). Works on every supported iPhone.
     case rules
+    /// Apple Intelligence's on-device model, checked against the scan (iOS 26).
+    case appleIntelligence
 
     var displayName: String {
         switch self {
         case .rules:
             return "Rules (on-device)"
+        case .appleIntelligence:
+            return "Apple Intelligence (on-device)"
         }
     }
 }

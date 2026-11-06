@@ -34,8 +34,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: "$(APP_BUNDLE_ID)"
-        MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "5"
+        MARKETING_VERSION: "1.1.0"
+        CURRENT_PROJECT_VERSION: "6"
         # Tabbit/Assets.xcassets/AppIcon.appiconset (made by Design/AppIcon/make_app_icon.py)
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 

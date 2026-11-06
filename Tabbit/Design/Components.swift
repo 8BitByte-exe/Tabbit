@@ -91,11 +91,15 @@ struct ClayBackground<S: Shape>: View {
 
     private func pressable(fill: LinearGradient, shade: Color, pressedFill: Color, pressedShade: Color,
                            pressedLight: Color) -> some View {
+        // The pressed well (blurred inner shading) is only built while pressed, so a
+        // screen full of cards doesn't render a hidden copy of every shadow.
         ZStack {
             raised(fill: fill, shade: shade)
                 .opacity(pressed ? 0 : 1)
-            well(fill: pressedFill, dark: pressedShade, light: pressedLight)
-                .opacity(pressed ? 1 : 0)
+            if pressed {
+                well(fill: pressedFill, dark: pressedShade, light: pressedLight)
+                    .transition(.opacity)
+            }
         }
     }
 
@@ -205,10 +209,92 @@ struct InsetCard<Content: View>: View {
 }
 
 // MARK: - Buttons
+//
+// Every Tabbit button goes through `ClayTapButton`, which does two things the
+// system button doesn't:
+// - A quick tap still shows the pressed look. Inside a scroll view, iOS waits a
+//   moment before it reports a touch as a press, so a fast tap used to fire the
+//   action without ever sinking in. Now every tap holds the pressed look for at
+//   least `Theme.Motion.minimumPress`.
+// - Taps that are really the end of a swipe are ignored (see `SwipeTapGate`), so
+//   swiping a card open doesn't also "tap" it closed again.
+
+/// Lets a swipe container tell the buttons inside it to ignore the tap that ends a swipe.
+final class SwipeTapGate {
+    private var holdUntil = Date.distantPast
+
+    /// Ignore taps for the next `seconds`.
+    func hold(for seconds: TimeInterval) {
+        holdUntil = Date().addingTimeInterval(seconds)
+    }
+
+    var isHoldingTaps: Bool {
+        return Date() < holdUntil
+    }
+}
+
+private struct SwipeTapGateKey: EnvironmentKey {
+    static let defaultValue: SwipeTapGate? = nil
+}
+
+extension EnvironmentValues {
+    /// Set by `SwipeRow` and `SwipeToConfirm` for the buttons inside them.
+    var swipeTapGate: SwipeTapGate? {
+        get { self[SwipeTapGateKey.self] }
+        set { self[SwipeTapGateKey.self] = newValue }
+    }
+}
+
+/// The shared tap handling behind the clay button styles. `style` draws the button;
+/// its Bool is true while a quick tap's pressed look is being held.
+struct ClayTapButton<Style: ButtonStyle>: View {
+    let configuration: PrimitiveButtonStyleConfiguration
+    let style: (Bool) -> Style
+
+    @State private var holdsPress = false
+    @State private var tapCount = 0
+    @Environment(\.swipeTapGate) private var gate
+
+    var body: some View {
+        Button(action: tapped) {
+            configuration.label
+        }
+        .buttonStyle(style(holdsPress))
+    }
+
+    private func tapped() {
+        if let gate = gate, gate.isHoldingTaps {
+            return
+        }
+        tapCount += 1
+        let thisTap = tapCount
+        holdsPress = true
+        configuration.trigger()
+        DispatchQueue.main.asyncAfter(deadline: .now() + Theme.Motion.minimumPress) {
+            if tapCount == thisTap {
+                holdsPress = false
+            }
+        }
+    }
+}
+
+/// A plain button (no clay) that still ignores the tap at the end of a swipe.
+struct ClayPlainButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        ClayTapButton(configuration: configuration) { _ in
+            PlainButtonStyle()
+        }
+    }
+}
+
+/// The pressed look's animation: sinks in fast, comes back up a little slower.
+private func pressAnimation(_ pressed: Bool) -> Animation {
+    return pressed ? Theme.Motion.pressIn : Theme.Motion.pressOut
+}
 
 /// Chunky capsule buttons. Primary = mint with dark text; secondary = clay;
 /// destructive = clay with red text. Pressed: sinks in, scales to 0.97, soft haptic.
-struct NeumorphicButtonStyle: ButtonStyle {
+struct NeumorphicButtonStyle: PrimitiveButtonStyle {
     enum Prominence {
         case primary
         case secondary
@@ -220,13 +306,28 @@ struct NeumorphicButtonStyle: ButtonStyle {
     var compact: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
-        NeumorphicButtonBody(configuration: configuration, prominence: prominence,
-                             fullWidth: fullWidth, compact: compact)
+        ClayTapButton(configuration: configuration) { holdsPress in
+            NeumorphicButtonLook(prominence: prominence, fullWidth: fullWidth, compact: compact,
+                                 holdsPress: holdsPress)
+        }
+    }
+}
+
+private struct NeumorphicButtonLook: ButtonStyle {
+    let prominence: NeumorphicButtonStyle.Prominence
+    let fullWidth: Bool
+    let compact: Bool
+    let holdsPress: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        NeumorphicButtonBody(label: configuration.label, pressed: configuration.isPressed || holdsPress,
+                             prominence: prominence, fullWidth: fullWidth, compact: compact)
     }
 }
 
 private struct NeumorphicButtonBody: View {
-    let configuration: ButtonStyleConfiguration
+    let label: ButtonStyleConfiguration.Label
+    let pressed: Bool
     let prominence: NeumorphicButtonStyle.Prominence
     let fullWidth: Bool
     let compact: Bool
@@ -235,8 +336,7 @@ private struct NeumorphicButtonBody: View {
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        let pressed = configuration.isPressed
-        return configuration.label
+        label
             .font(compact ? Theme.Fonts.subheadline.weight(.bold) : Theme.Fonts.button)
             .foregroundStyle(foreground)
             .padding(.horizontal, compact ? Theme.Spacing.l : Theme.Spacing.xl)
@@ -251,7 +351,7 @@ private struct NeumorphicButtonBody: View {
             }
             .contentShape(Capsule(style: .continuous))
             .scaleEffect(pressed && !reduceMotion ? Theme.Motion.pressedScale : 1)
-            .animation(Theme.Motion.press, value: pressed)
+            .animation(pressAnimation(pressed), value: pressed)
             .opacity(isEnabled ? 1 : 0.45)
             .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: pressed) { _, isDown in isDown }
     }
@@ -266,7 +366,7 @@ private struct NeumorphicButtonBody: View {
 }
 
 /// Round clay icon buttons. `.accent` is the mint "add" button; `.destructive` has a red icon.
-struct NeumorphicIconButtonStyle: ButtonStyle {
+struct NeumorphicIconButtonStyle: PrimitiveButtonStyle {
     enum Prominence {
         case plain
         case accent
@@ -277,12 +377,26 @@ struct NeumorphicIconButtonStyle: ButtonStyle {
     var size: CGFloat = Theme.Size.tapTarget
 
     func makeBody(configuration: Configuration) -> some View {
-        NeumorphicIconButtonBody(configuration: configuration, prominence: prominence, size: size)
+        ClayTapButton(configuration: configuration) { holdsPress in
+            NeumorphicIconButtonLook(prominence: prominence, size: size, holdsPress: holdsPress)
+        }
+    }
+}
+
+private struct NeumorphicIconButtonLook: ButtonStyle {
+    let prominence: NeumorphicIconButtonStyle.Prominence
+    let size: CGFloat
+    let holdsPress: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        NeumorphicIconButtonBody(label: configuration.label, pressed: configuration.isPressed || holdsPress,
+                                 prominence: prominence, size: size)
     }
 }
 
 private struct NeumorphicIconButtonBody: View {
-    let configuration: ButtonStyleConfiguration
+    let label: ButtonStyleConfiguration.Label
+    let pressed: Bool
     let prominence: NeumorphicIconButtonStyle.Prominence
     let size: CGFloat
 
@@ -290,8 +404,7 @@ private struct NeumorphicIconButtonBody: View {
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        let pressed = configuration.isPressed
-        return configuration.label
+        label
             .font(size > 52 ? Theme.Fonts.title3.weight(.bold) : Theme.Fonts.headline)
             .foregroundStyle(foreground)
             .frame(width: size, height: size)
@@ -302,7 +415,7 @@ private struct NeumorphicIconButtonBody: View {
             }
             .contentShape(Circle())
             .scaleEffect(pressed && !reduceMotion ? Theme.Motion.pressedScale : 1)
-            .animation(Theme.Motion.press, value: pressed)
+            .animation(pressAnimation(pressed), value: pressed)
             .opacity(isEnabled ? 1 : 0.45)
             .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: pressed) { _, isDown in isDown }
     }
@@ -318,26 +431,39 @@ private struct NeumorphicIconButtonBody: View {
 
 /// Makes a whole card tappable: raised clay with a small chevron at the end, so it
 /// reads as something to open. It sinks in while pressed.
-struct NeumorphicCardButtonStyle: ButtonStyle {
+struct NeumorphicCardButtonStyle: PrimitiveButtonStyle {
     var padding: CGFloat = Theme.Spacing.l
     var showsChevron: Bool = true
 
     func makeBody(configuration: Configuration) -> some View {
-        NeumorphicCardButtonBody(configuration: configuration, padding: padding, showsChevron: showsChevron)
+        ClayTapButton(configuration: configuration) { holdsPress in
+            NeumorphicCardButtonLook(padding: padding, showsChevron: showsChevron, holdsPress: holdsPress)
+        }
+    }
+}
+
+private struct NeumorphicCardButtonLook: ButtonStyle {
+    let padding: CGFloat
+    let showsChevron: Bool
+    let holdsPress: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        NeumorphicCardButtonBody(label: configuration.label, pressed: configuration.isPressed || holdsPress,
+                                 padding: padding, showsChevron: showsChevron)
     }
 }
 
 private struct NeumorphicCardButtonBody: View {
-    let configuration: ButtonStyleConfiguration
+    let label: ButtonStyleConfiguration.Label
+    let pressed: Bool
     let padding: CGFloat
     let showsChevron: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let pressed = configuration.isPressed
-        return HStack(spacing: Theme.Spacing.m) {
-            configuration.label
+        HStack(spacing: Theme.Spacing.m) {
+            label
                 .frame(maxWidth: .infinity, alignment: .leading)
             if showsChevron {
                 ChevronAffordance()
@@ -350,7 +476,7 @@ private struct NeumorphicCardButtonBody: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .scaleEffect(pressed && !reduceMotion ? 0.985 : 1)
-        .animation(Theme.Motion.press, value: pressed)
+        .animation(pressAnimation(pressed), value: pressed)
     }
 }
 
@@ -369,11 +495,23 @@ struct ChevronAffordance: View {
 }
 
 /// A small pill (filters, people, categories). Selected chips are mint.
-struct ClayChipStyle: ButtonStyle {
+struct ClayChipStyle: PrimitiveButtonStyle {
     var isSelected: Bool
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        ClayTapButton(configuration: configuration) { holdsPress in
+            ClayChipLook(isSelected: isSelected, holdsPress: holdsPress)
+        }
+    }
+}
+
+private struct ClayChipLook: ButtonStyle {
+    let isSelected: Bool
+    let holdsPress: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed || holdsPress
+        return configuration.label
             .font(Theme.Fonts.subheadline.weight(.semibold))
             .foregroundStyle(isSelected ? Theme.Colors.onAccent : Theme.Colors.text)
             .lineLimit(1)
@@ -381,10 +519,10 @@ struct ClayChipStyle: ButtonStyle {
             .frame(minHeight: 40)
             .background {
                 ClayBackground(shape: Capsule(style: .continuous), style: isSelected ? .accent : .raised,
-                               elevation: Theme.Elevations.small, pressed: configuration.isPressed)
+                               elevation: Theme.Elevations.small, pressed: pressed)
             }
             .contentShape(Capsule(style: .continuous))
-            .animation(Theme.Motion.press, value: configuration.isPressed)
+            .animation(pressAnimation(pressed), value: pressed)
             .sensoryFeedback(.selection, trigger: isSelected)
     }
 }
@@ -619,7 +757,7 @@ struct Expandable<Header: View, Content: View>: View {
                 }
                 .contentShape(Rectangle())
             })
-            .buttonStyle(.plain)
+            .buttonStyle(ClayPlainButtonStyle())
             .accessibilityHint(isExpanded ? "Hides the details" : "Shows the details")
 
             content
@@ -659,6 +797,33 @@ struct SwipeAction: Identifiable {
     let action: () -> Void
 }
 
+/// Shared bookkeeping for a horizontal swipe inside a vertical scroll view.
+///
+/// Decides once per drag whether it's sideways (a swipe) or up and down (a scroll),
+/// and holds taps on the row's buttons while a swipe is under way, so the tap that
+/// ends a swipe doesn't also open or close the card.
+private struct SwipeTracking {
+    /// nil until the drag has moved far enough to tell.
+    var isHorizontal: Bool?
+    var lastTranslation: CGFloat = 0
+    var lastPredicted: CGFloat = 0
+
+    /// Returns true if this drag is a sideways swipe.
+    mutating func update(_ value: DragGesture.Value, gate: SwipeTapGate) -> Bool {
+        if isHorizontal == nil {
+            isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.3
+        }
+        guard isHorizontal == true else {
+            return false
+        }
+        lastTranslation = value.translation.width
+        lastPredicted = value.predictedEndTranslation.width
+        // Rolling hold: if iOS cancels the drag without an end event, taps come back by themselves.
+        gate.hold(for: 0.6)
+        return true
+    }
+}
+
 /// A row that slides left to reveal round clay buttons (edit, move, delete), in the
 /// app's own style rather than the system's colored swipe buttons. Only one row is
 /// open at a time (`openRow`). VoiceOver users get the same actions as accessibility actions.
@@ -669,7 +834,9 @@ struct SwipeRow<Content: View>: View {
     private let content: Content
 
     @State private var drag: CGFloat = 0
-    @State private var isHorizontal: Bool?
+    @State private var tracking = SwipeTracking()
+    @State private var gate = SwipeTapGate()
+    @GestureState private var isTouching = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let buttonSize: CGFloat = 52
@@ -710,13 +877,26 @@ struct SwipeRow<Content: View>: View {
             .padding(.trailing, Theme.Spacing.xs)
             .opacity(Double(progress))
             .scaleEffect(reduceMotion ? 1 : 0.85 + 0.15 * progress, anchor: .trailing)
-            .allowsHitTesting(isOpen)
+            .allowsHitTesting(isOpen && drag == 0)
             .accessibilityHidden(true)
 
             content
+                .environment(\.swipeTapGate, gate)
                 .offset(x: offset)
         }
         .simultaneousGesture(dragGesture(base: base))
+        .onChange(of: isTouching) { _, touching in
+            // iOS can cancel a drag (when the list starts scrolling) without an end
+            // event. Settle the row anyway, so it never gets stuck half open.
+            if !touching && tracking.isHorizontal != nil {
+                DispatchQueue.main.async {
+                    if tracking.isHorizontal == true {
+                        settle(base: openRow == id ? -revealWidth : 0, predicted: tracking.lastPredicted)
+                    }
+                    tracking = SwipeTracking()
+                }
+            }
+        }
         .accessibilityActions {
             ForEach(actions) { action in
                 Button(action.label, action: action.action)
@@ -726,46 +906,158 @@ struct SwipeRow<Content: View>: View {
 
     private func dragGesture(base: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 14)
+            .updating($isTouching) { _, state, _ in
+                state = true
+            }
             .onChanged { value in
-                if isHorizontal == nil {
-                    isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.3
-                    if isHorizontal == true && openRow != id && openRow != nil {
-                        withAnimation(Theme.Motion.standard) {
-                            openRow = nil
-                        }
-                    }
-                }
-                guard isHorizontal == true else {
+                let wasDecided = tracking.isHorizontal != nil
+                guard tracking.update(value, gate: gate) else {
                     return
+                }
+                if !wasDecided && openRow != id && openRow != nil {
+                    // Swiping another row closes the open one.
+                    withAnimation(Theme.Motion.standard) {
+                        openRow = nil
+                    }
                 }
                 drag = value.translation.width
             }
             .onEnded { value in
                 defer {
-                    isHorizontal = nil
+                    tracking = SwipeTracking()
                 }
-                guard isHorizontal == true else {
+                guard tracking.isHorizontal == true else {
                     return
                 }
-                let projected = base + value.predictedEndTranslation.width
-                withAnimation(Theme.Motion.standard) {
-                    if projected < -revealWidth / 2 {
-                        openRow = id
-                    } else if openRow == id {
-                        openRow = nil
-                    }
-                    drag = 0
-                }
-                if projected < -revealWidth / 2 {
-                    Haptics.soft()
-                }
+                gate.hold(for: 0.35)
+                settle(base: base, predicted: value.predictedEndTranslation.width)
             }
+    }
+
+    /// Opens or closes the row where the swipe was heading.
+    private func settle(base: CGFloat, predicted: CGFloat) {
+        let projected = base + predicted
+        let opens = projected < -revealWidth / 2
+        withAnimation(Theme.Motion.standard) {
+            if opens {
+                openRow = id
+            } else if openRow == id {
+                openRow = nil
+            }
+            drag = 0
+        }
+        if opens && base == 0 {
+            Haptics.soft()
+        }
     }
 
     private func close() {
         withAnimation(Theme.Motion.standard) {
             openRow = nil
             drag = 0
+        }
+    }
+}
+
+/// A card you swipe to the right to do one thing, like marking a payment paid.
+///
+/// As the card slides, a well behind it shows the action; past the threshold the
+/// well turns mint (with a tick of haptic feedback), and letting go does it.
+/// Swiping less than that springs back. The action is also an accessibility action.
+struct SwipeToConfirm<Content: View>: View {
+    let title: String
+    let symbol: String
+    var cornerRadius: CGFloat = Theme.Radius.card
+    let onConfirm: () -> Void
+    private let content: Content
+
+    @State private var drag: CGFloat = 0
+    @State private var tracking = SwipeTracking()
+    @State private var gate = SwipeTapGate()
+    @GestureState private var isTouching = false
+
+    private let threshold: CGFloat = 110
+
+    init(title: String, symbol: String, cornerRadius: CGFloat = Theme.Radius.card,
+         onConfirm: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.symbol = symbol
+        self.cornerRadius = cornerRadius
+        self.onConfirm = onConfirm
+        self.content = content()
+    }
+
+    var body: some View {
+        // Only to the right, with resistance past the threshold.
+        let offset = drag <= threshold ? max(drag, 0) : threshold + (drag - threshold) * 0.35
+        let armed = drag >= threshold
+        let progress = min(max(offset / threshold, 0), 1)
+
+        // The well sits behind the card at the card's own size; only the card slides.
+        return content
+            .environment(\.swipeTapGate, gate)
+            .offset(x: offset)
+            .background {
+                if offset > 0 {
+                    ClayBackground(shape: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
+                                   style: armed ? .accentInset : .inset)
+                        .overlay(alignment: .leading) {
+                            Label(title, systemImage: symbol)
+                                .font(Theme.Fonts.subheadline.weight(.bold))
+                                .foregroundStyle(armed ? Theme.Colors.onAccent : Theme.Colors.secondaryText)
+                                .lineLimit(1)
+                                .padding(.leading, Theme.Spacing.l)
+                                .opacity(Double(progress))
+                        }
+                        .animation(Theme.Motion.press, value: armed)
+                        .accessibilityHidden(true)
+                }
+            }
+            .sensoryFeedback(.impact(weight: .medium), trigger: armed) { _, isArmed in isArmed }
+            .simultaneousGesture(dragGesture)
+            .onChange(of: isTouching) { _, touching in
+                if !touching && tracking.isHorizontal != nil {
+                    DispatchQueue.main.async {
+                        if tracking.isHorizontal == true {
+                            finish()
+                        }
+                        tracking = SwipeTracking()
+                    }
+                }
+            }
+            .accessibilityAction(named: title, onConfirm)
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 14)
+            .updating($isTouching) { _, state, _ in
+                state = true
+            }
+            .onChanged { value in
+                guard tracking.update(value, gate: gate) else {
+                    return
+                }
+                drag = value.translation.width
+            }
+            .onEnded { _ in
+                defer {
+                    tracking = SwipeTracking()
+                }
+                guard tracking.isHorizontal == true else {
+                    return
+                }
+                gate.hold(for: 0.35)
+                finish()
+            }
+    }
+
+    private func finish() {
+        let confirmed = drag >= threshold
+        withAnimation(Theme.Motion.standard) {
+            drag = 0
+        }
+        if confirmed {
+            onConfirm()
         }
     }
 }
