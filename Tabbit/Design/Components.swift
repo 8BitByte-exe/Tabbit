@@ -282,8 +282,14 @@ struct ClayTapButton<Style: ButtonStyle>: View {
 struct ClayPlainButtonStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         ClayTapButton(configuration: configuration) { _ in
-            PlainButtonStyle()
+            PlainLook()
         }
+    }
+}
+
+private struct PlainLook: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
     }
 }
 
