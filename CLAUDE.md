@@ -11,6 +11,12 @@ The owner has no Mac and no Xcode. **The GitHub Actions macOS runner is the only
 - Don't call something done until both jobs are green.
 - Don't add steps that need Xcode on a dev machine.
 
+## Branches and pull requests
+
+- Name branches after the work, lowercase with hyphens: `feature/<what>` (`feature/apple-intelligence`), `fix/<what>` (`fix/camera-black-bar`), `design/<what>`, `release/<version>` (`release/1.1`).
+- Never use generated names like `claude/happy-allen-alftw6`. If a cloud session is assigned one, the owner's standing instruction is to create and use a descriptive branch instead, and say which one in the reply.
+- One branch and one pull request per batch of work. After a pull request is merged, delete its branch.
+
 ## Privacy rule: everything stays on the device
 
 Scanning, OCR, parsing, splitting and storage must run on the iPhone.
