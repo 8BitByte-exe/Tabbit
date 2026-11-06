@@ -172,9 +172,16 @@ struct ReceiptDetailPage: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Label(DateText.long(receipt.date), systemImage: "calendar")
+                        Label(dateLine, systemImage: "calendar")
+                        if !receipt.location.isEmpty {
+                            Label(receipt.location, systemImage: "mappin.and.ellipse")
+                                .lineLimit(2)
+                        }
                         if isShared {
-                            Label("Paid by \(payerName)", systemImage: "creditcard.fill")
+                            Label("Paid by \(payerName)", systemImage: "person.fill")
+                        }
+                        if !receipt.paymentMethod.isEmpty {
+                            Label("Paid with \(receipt.paymentMethod)", systemImage: "creditcard.fill")
                         }
                     }
                     .font(Theme.Fonts.subheadline)
@@ -184,6 +191,14 @@ struct ReceiptDetailPage: View {
                 photoButton
             }
         }
+    }
+
+    /// "Monday, Nov 3, 2026 at 2:32 PM", or just the day.
+    private var dateLine: String {
+        guard let time = receipt.time else {
+            return DateText.long(receipt.date)
+        }
+        return DateText.long(receipt.date) + " at " + DateText.time(time)
     }
 
     private var payerName: String {

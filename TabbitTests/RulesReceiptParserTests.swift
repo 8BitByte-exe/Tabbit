@@ -27,7 +27,7 @@ final class RulesReceiptParserTests: XCTestCase {
     }
 
     private let groceryItems = itemList([
-        ("BANANAS", "1.29"), ("ORGANIC MILK", "4.99"), ("AVOCADO", "1.98"), ("COUPON", "-0.50"),
+        ("BANANAS", "1.29"), ("ORGANIC MILK", "4.99"), ("2× AVOCADO", "1.98"), ("COUPON", "-0.50"),
     ])
 
     func testGroceryReceipt() {
@@ -35,6 +35,9 @@ final class RulesReceiptParserTests: XCTestCase {
             let receipt = parser.parse(groceryReceipt().build(reversed: reversed))
             XCTAssertEqual(receipt.merchant, "TRADER JOE'S")
             XCTAssertEqual(receipt.date, CalendarDate(year: 2026, month: 11, day: 2))
+            XCTAssertEqual(receipt.time, ClockTime(hour: 14, minute: 32))
+            XCTAssertEqual(receipt.location, "123 MAIN STREET, SPRINGFIELD, IL 62701")
+            XCTAssertEqual(receipt.paymentMethod, "Visa")
             XCTAssertEqual(itemList(receipt), groceryItems)
             XCTAssertEqual(receipt.subtotal, money("7.76"))
             XCTAssertEqual(receipt.tax, money("0.62"))
@@ -456,7 +459,8 @@ final class RulesReceiptParserTests: XCTestCase {
             .build()
         let receipt = parser.parse(scan)
         XCTAssertEqual(receipt.merchant, "BÄCKEREI MÜLLER")
-        XCTAssertEqual(itemList(receipt), itemList([("BRÖTCHEN", "1.80"), ("KAFFEE", "2.90")]))
+        XCTAssertEqual(itemList(receipt), itemList([("4× BRÖTCHEN", "1.80"), ("KAFFEE", "2.90")]))
+        XCTAssertEqual(receipt.paymentMethod, "Cash")
         XCTAssertEqual(receipt.subtotal, money("4.70"))
         XCTAssertEqual(receipt.total, money("4.70"))
     }

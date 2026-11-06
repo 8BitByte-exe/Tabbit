@@ -25,6 +25,25 @@ enum ScanAutofill {
             unreadable.insert(.date)
         }
 
+        // The address, time and payment method are on most receipts; say so when they weren't found.
+        let location = parsed.location ?? ""
+        if location.isEmpty {
+            unreadable.insert(.location)
+        } else {
+            autofilled.insert(.location)
+        }
+        if parsed.time != nil {
+            autofilled.insert(.time)
+        } else {
+            unreadable.insert(.time)
+        }
+        let paymentMethod = parsed.paymentMethod ?? ""
+        if paymentMethod.isEmpty {
+            unreadable.insert(.payment)
+        } else {
+            autofilled.insert(.payment)
+        }
+
         let category = CategoryGuesser.guess(merchant: merchant, items: parsed.lineItems.map { item in item.name },
                                              suggestion: processed.suggestedCategory)
         if category != .other {
@@ -56,7 +75,10 @@ enum ScanAutofill {
             createdAt: now,
             updatedAt: now,
             merchant: merchant,
+            location: location,
             date: date,
+            time: parsed.time,
+            paymentMethod: paymentMethod,
             category: category,
             paidBy: paidBy,
             items: items,

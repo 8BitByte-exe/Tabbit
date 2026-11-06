@@ -279,6 +279,11 @@ enum ReceiptKeywords {
         if words.contains(where: { word in word == "OFF" || matchesAny(word, discountWords) }) {
             return .discount
         }
+        if isDeal(text) {
+            // "BUY 1 GET 1 FREE -1.99" takes money off; "2 FOR 1" or "MIX & MATCH" only describes a deal.
+            let takesMoneyOff = words.contains(where: { word in word == "FREE" || word == "GET" || word == "HALF" })
+            return takesMoneyOff ? .discount : .info
+        }
         if isUnitPrice(words, text: text) {
             return .unitPrice
         }
@@ -398,6 +403,39 @@ enum ReceiptKeywords {
         // "PRICE/L", "PRICE $/L": a slash with a unit, and no "@" (that's a quantity line under an item).
         return text.contains("/") && !text.contains("@")
             && letterWords.contains(where: { word in unitWords.contains(word) })
+    }
+
+    /// Words of deal descriptions: "2 FOR 1", "BUY 1 GET 1 FREE", "BOGO", "MIX & MATCH", "3 FOR 2 OFFER".
+    private static let dealWords: Set<String> = [
+        "BOGO", "BOGOF", "BUY", "GET", "FREE", "FOR", "DEAL", "DEALS", "PROMO", "PROMOTION", "OFFER", "OFFERS",
+        "MIX", "MATCH", "AND", "N", "ANY", "HALF", "PRICE", "MULTIBUY", "MULTI", "SPECIAL", "WHEN", "YOU", "OR",
+        "MORE", "ITEM", "ITEMS", "EA", "EACH", "X", "APPLIED", "PCT", "PERCENT", "SECOND", "ND", "THE", "OF",
+    ]
+
+    // "B1G1", "B2G1F": buy-one-get-one codes.
+    private static let dealCodePattern = Patterns.make(#"\bB\d+G\d+F?\b"#, caseInsensitive: true)
+    // "2 FOR 1", "3 for 2", "2 FOR $5" (not "2 FOR 5.00", which is a price for the pair).
+    private static let countForCountPattern = Patterns.make(
+        #"(?<![\d.,])\d+\s*FOR\s*[$€£]?\d+(?![\d.,])"#,
+        caseInsensitive: true
+    )
+
+    /// True if the line only describes a deal ("2 FOR 1", "BUY 1 GET 1 FREE", "BOGO", "MIX & MATCH").
+    /// That's information about prices, never a purchase of its own.
+    static func isDeal(_ text: String) -> Bool {
+        let length = (text as NSString).length
+        let withoutCodes = dealCodePattern.stringByReplacingMatches(
+            in: text, options: [], range: NSRange(location: 0, length: length), withTemplate: " ")
+        let letterWords = words(in: withoutCodes).filter { word in word.rangeOfCharacter(from: .letters) != nil }
+        guard letterWords.allSatisfy({ word in dealWords.contains(word) }) else {
+            return false
+        }
+        if dealCodePattern.hasMatch(in: text) || countForCountPattern.hasMatch(in: text) {
+            return true
+        }
+        let set = Set(letterWords)
+        return set.contains("BOGO") || set.contains("BOGOF") || set.contains("MULTIBUY")
+            || (set.contains("BUY") && set.contains("GET")) || (set.contains("MIX") && set.contains("MATCH"))
     }
 
     /// True if the line is only a department heading, like "PRODUCE" or "21-GROCERY".

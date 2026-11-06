@@ -145,7 +145,7 @@ enum ModelReceiptVerifier {
     static let noItemsNote = "Apple Intelligence found no items on this receipt, so Tabbit used its built-in rules."
     static let rulesAddUpBetterNote = "Tabbit's built-in rules made the amounts add up better than Apple Intelligence's reading, so it used the rules."
 
-    /// At most this many disputed lines are tried both ways (2^10 combinations).
+    /// At most this many moves (disputed lines, other readings) are tried (2^10 combinations).
     static let maxDisputedLines = 10
 
     static func evaluate(_ reading: ModelReceiptReading, numbered: NumberedReceipt, rules: Receipt) -> IntelligenceOutcome {
@@ -161,6 +161,13 @@ enum ModelReceiptVerifier {
         }
         receipt.merchant = merchant ?? rules.merchant
         receipt.date = rules.date ?? calendarDate(reading.date)
+        // The address, time and payment are read straight from the scan.
+        receipt.location = rules.location
+        receipt.time = rules.time
+        receipt.paymentMethod = rules.paymentMethod
+        if receipt.tax == nil && receipt.includedTax == nil {
+            receipt.includedTax = rules.includedTax
+        }
 
         let modelScore = RulesReceiptParser.consistencyScore(of: receipt)
         let rulesScore = RulesReceiptParser.consistencyScore(of: rules)
@@ -205,9 +212,18 @@ enum ModelReceiptVerifier {
             return modelKind.isPurchase != ruleKind.isPurchase
         }
 
-        /// The amount it adds to the items: a discount always takes money off.
-        func itemAmount(as kind: ModelLineKind) -> Decimal {
-            let amount = entry.amount
+        /// What it counts as when it's in the items list.
+        var purchaseKind: ModelLineKind {
+            if kind.isPurchase {
+                return kind
+            }
+            return ruleKind.isPurchase ? ruleKind : .item
+        }
+
+        /// The amount it adds to the items: a discount always takes money off. `swapped` uses
+        /// the line's other reading ("2 BANANAS 1.99" as 3.98).
+        func itemAmount(as kind: ModelLineKind, swapped: Bool = false) -> Decimal {
+            let amount = swapped ? (entry.alternative ?? entry.amount) : entry.amount
             if kind == .discount || amount < 0 {
                 return amount < 0 ? amount : -amount
             }
@@ -221,19 +237,32 @@ enum ModelReceiptVerifier {
         /// Backed by the model's labels (+1), only by the keywords (0), or going against them (-1).
         let prior: Int
         let note: String?
+        /// For "no tax": the printed tax that's already in the prices.
+        let included: Decimal?
 
-        init(_ value: Decimal?, prior: Int, note: String? = nil) {
+        init(_ value: Decimal?, prior: Int, note: String? = nil, included: Decimal? = nil) {
             self.value = value
             self.prior = prior
             self.note = note
+            self.included = included
         }
     }
 
-    /// How many disputed lines to flip to reach a sum, and which.
+    /// One change that may make the items add up: count or leave out a disputed line, or
+    /// read a quantity line the other way (`swap`).
+    private struct Move {
+        let index: Int
+        let swap: Bool
+    }
+
+    /// How many moves it takes to reach a sum, and which.
     private struct Fix {
         let flips: Int
         let mask: Int
     }
+
+    /// Tips are usually a round share of the bill.
+    private static let usualTipPercents: [Decimal] = [10, 12, 15, 18, 20, 22, 25]
 
     /// The model's receipt, or nil if it found no items at all.
     static func assemble(_ reading: ModelReceiptReading, numbered: NumberedReceipt) -> Receipt? {
@@ -255,15 +284,28 @@ enum ModelReceiptVerifier {
             )
         }
 
-        // Items as labelled, and the disputed lines that may be flipped.
+        // Items as labelled; disputed lines may be flipped and quantity lines read the other way.
         var included = lines.map { line in line.kind.isPurchase && line.entry.amount != 0 }
         guard included.contains(true) || lines.contains(where: { line in line.isDisputed }) else {
             return nil
         }
-        let disputed = Array(lines.indices.filter { index in
-            lines[index].isDisputed && lines[index].entry.amount != 0
-        }.prefix(maxDisputedLines))
-        let fixes = reachableSums(lines: lines, included: included, disputed: disputed)
+        var moves: [Move] = []
+        for index in lines.indices where lines[index].entry.amount != 0 {
+            if lines[index].isDisputed {
+                moves.append(Move(index: index, swap: false))
+            }
+            if lines[index].entry.alternative != nil && (included[index] || lines[index].isDisputed) {
+                moves.append(Move(index: index, swap: true))
+            }
+        }
+        moves = Array(moves.prefix(maxDisputedLines))
+        let fixes = reachableSums(lines: lines, included: included, moves: moves)
+        let paidAmounts = Set(lines.filter { line in
+            (line.kind == .payment || line.ruleKind == .payment) && line.entry.amount > 0
+        }.map { line in line.entry.amount })
+        let taxRates = lines.filter { line in line.kind == .tax || line.ruleKind == .tax }.compactMap { line in
+            ReceiptDetailsParser.percent(in: line.entry.text)
+        }
 
         let subtotals = options(lines, kind: .subtotal, none: Option(nil, prior: hasModel(lines, .subtotal) ? -1 : 0))
         let totals = options(lines, kind: .total, none: nil)
@@ -303,6 +345,8 @@ enum ModelReceiptVerifier {
                         } else {
                             score -= 4
                         }
+                        score += plausibility(subtotal: subtotal.value, tax: taxValue, tip: tipValue,
+                                              total: total.value, paid: paidAmounts, taxRates: taxRates)
                         if score > bestScore {
                             bestScore = score
                             best = (subtotal: subtotal, tax: tax, tip: tip, total: total, fix: fix)
@@ -316,11 +360,19 @@ enum ModelReceiptVerifier {
         }
 
         var notes: [String] = []
+        var swapped: Set<Int> = []
         if let fix = chosen.fix, fix.flips > 0 {
             var changes: [String] = []
-            for (bit, index) in disputed.enumerated() where fix.mask & (1 << bit) != 0 {
-                included[index].toggle()
-                changes.append("\(included[index] ? "counted" : "left out") \"\(lines[index].entry.text)\"")
+            for (bit, move) in moves.enumerated() where fix.mask & (1 << bit) != 0 {
+                let line = lines[move.index]
+                if move.swap {
+                    swapped.insert(move.index)
+                    let amount = line.entry.alternative ?? line.entry.amount
+                    changes.append("read \"\(line.entry.text)\" as \(MoneyInput.editText(amount))")
+                } else {
+                    included[move.index].toggle()
+                    changes.append("\(included[move.index] ? "counted" : "left out") \"\(line.entry.text)\"")
+                }
             }
             let target = chosen.subtotal.value == nil ? "total" : "subtotal"
             notes.append("To match the \(target), " + changes.joined(separator: ", ") + ".")
@@ -330,16 +382,35 @@ enum ModelReceiptVerifier {
         }
 
         var items: [ReceiptLineItem] = []
+        var computed: [String] = []
         for (index, line) in lines.enumerated() where included[index] {
-            let kind: ModelLineKind = line.kind.isPurchase ? line.kind : (line.ruleKind.isPurchase ? line.ruleKind : .item)
-            items.append(ReceiptLineItem(
-                name: itemName(for: line, kind: kind, numbered: numbered),
-                amount: line.itemAmount(as: kind),
-                confidence: line.entry.confidence
-            ))
+            let kind = line.purchaseKind
+            let isSwapped = swapped.contains(index)
+            let amount = line.itemAmount(as: kind, swapped: isSwapped)
+            var name = itemName(for: line, kind: kind, numbered: numbered)
+            if kind == .item && amount > 0 {
+                name = LineAmountParser.name(name, quantity: line.entry.quantity)
+            }
+            var item = ReceiptLineItem(name: name, amount: amount, confidence: line.entry.confidence)
+            item.quantity = line.entry.quantity
+            if isSwapped, let quantity = line.entry.quantity, quantity > 0 {
+                let each = amount / quantity
+                item.unitPrice = Money.rounded(each) == each ? each : nil
+            } else {
+                item.unitPrice = line.entry.unitPrice
+            }
+            if line.entry.isComputed && !isSwapped {
+                computed.append(line.entry.text)
+            }
+            items.append(item)
         }
         guard !items.isEmpty else {
             return nil
+        }
+        if computed.count == 1, let text = computed.first {
+            notes.append("Worked out the price of \"\(text)\" from its quantity and unit price.")
+        } else if computed.count > 1 {
+            notes.append("Worked out \(computed.count) prices from their quantity and unit price.")
         }
 
         let tax = chosen.tax.value.flatMap { value in value == 0 ? nil : value }
@@ -352,6 +423,7 @@ enum ModelReceiptVerifier {
             tax: tax,
             total: chosen.total.value,
             tip: tip,
+            includedTax: chosen.tax.value == 0 ? chosen.tax.included : nil,
             parser: .appleIntelligence,
             notes: []
         )
@@ -436,34 +508,37 @@ enum ModelReceiptVerifier {
         let printedTax = result.first?.value ?? 0
         if printedTax > 0 {
             let note = "The prices already include \(MoneyInput.editText(printedTax)) tax, so it isn't added again."
-            result.append(Option(Decimal(0), prior: pricesIncludeTax ? 1 : -1, note: note))
+            result.append(Option(Decimal(0), prior: pricesIncludeTax ? 1 : -1, note: note, included: printedTax))
         } else {
             result.append(Option(Decimal(0), prior: 0))
         }
         return result
     }
 
-    /// Every sum the items can reach by flipping some of the disputed lines, with the
-    /// fewest flips. A sum that two different smallest fixes reach is left out (no guessing).
-    private static func reachableSums(lines: [Line], included: [Bool], disputed: [Int]) -> [Int: Fix] {
-        var base = 0
-        for (index, line) in lines.enumerated() where included[index] {
-            base += Money.cents(line.itemAmount(as: line.kind))
-        }
+    /// Every sum the items can reach with some of the moves, with the fewest moves. A sum
+    /// that two different smallest fixes reach is left out (no guessing).
+    private static func reachableSums(lines: [Line], included: [Bool], moves: [Move]) -> [Int: Fix] {
         var best: [Int: Fix] = [:]
         var ambiguous: Set<Int> = []
-        for mask in 0..<(1 << disputed.count) {
-            var sum = base
+        for mask in 0..<(1 << moves.count) {
+            var counted = included
+            var swapped: Set<Int> = []
             var flips = 0
-            for (bit, index) in disputed.enumerated() where mask & (1 << bit) != 0 {
+            for (bit, move) in moves.enumerated() where mask & (1 << bit) != 0 {
                 flips += 1
-                let line = lines[index]
-                if included[index] {
-                    sum -= Money.cents(line.itemAmount(as: line.kind))
+                if move.swap {
+                    swapped.insert(move.index)
                 } else {
-                    let kind: ModelLineKind = line.ruleKind.isPurchase ? line.ruleKind : .item
-                    sum += Money.cents(line.itemAmount(as: kind))
+                    counted[move.index].toggle()
                 }
+            }
+            // Reading a line the other way only matters if it's counted.
+            if swapped.contains(where: { index in !counted[index] }) {
+                continue
+            }
+            var sum = 0
+            for (index, line) in lines.enumerated() where counted[index] {
+                sum += Money.cents(line.itemAmount(as: line.purchaseKind, swapped: swapped.contains(index)))
             }
             if let existing = best[sum] {
                 if flips < existing.flips {
@@ -480,6 +555,74 @@ enum ModelReceiptVerifier {
             best[sum] = nil
         }
         return best
+    }
+
+    /// Points for a combination that looks like a real receipt, and against one that can't be:
+    /// - the tax is always less than the total, and rarely more than 30% of what it's on;
+    /// - a printed rate ("HST 13%") that gives the tax backs it up;
+    /// - tips are usually 10, 15, 18, 20… percent of the bill, before or after tax, and rarely
+    ///   more than 40% of it;
+    /// - a total that equals a card payment is confirmed by it.
+    private static func plausibility(subtotal: Decimal?, tax: Decimal, tip: Decimal, total: Decimal?,
+                                     paid: Set<Decimal>, taxRates: [Decimal]) -> Int {
+        var score = 0
+        var base = subtotal
+        if base == nil, let total = total {
+            base = total - tax - tip
+        }
+        if tax > 0 {
+            if let total = total, tax >= total {
+                score -= 6
+            }
+            if let base = base, base > 0 {
+                if tax * 10 > base * 3 {
+                    score -= 3
+                } else if matchesRate(tax, base: base, rates: taxRates) {
+                    score += 1
+                }
+            }
+        }
+        if tip > 0, let base = base, base > 0 {
+            if tip * 10 > base * 4 {
+                score -= 2
+            } else if isUsualTip(tip, base: base) || isUsualTip(tip, base: base + tax) {
+                score += 1
+            }
+        }
+        if let total = total, paid.contains(where: { amount in ReceiptValidator.matches(amount, total) }) {
+            score += 1
+        }
+        return score
+    }
+
+    /// True if one printed rate, or all of them together (GST 5% + PST 7%), gives the tax within 3 cents.
+    private static func matchesRate(_ tax: Decimal, base: Decimal, rates: [Decimal]) -> Bool {
+        guard !rates.isEmpty else {
+            return false
+        }
+        let combined = rates.reduce(Decimal(0), +)
+        let tolerance = Decimal(3) / 100
+        for rate in rates + [combined] {
+            let expected = base * rate / 100
+            let difference = expected - tax
+            if (difference < 0 ? -difference : difference) <= tolerance {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// True if the tip is a usual whole percentage of `base`, to the cent.
+    private static func isUsualTip(_ tip: Decimal, base: Decimal) -> Bool {
+        let tolerance = Decimal(1) / 100
+        for percent in usualTipPercents {
+            let expected = base * percent / 100
+            let difference = expected - tip
+            if (difference < 0 ? -difference : difference) <= tolerance {
+                return true
+            }
+        }
+        return false
     }
 
     /// The fix that makes the items equal `target`, within a cent.

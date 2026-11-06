@@ -15,6 +15,8 @@ enum Changelog {
             (symbol: "sparkles", text: "On iOS 26, Apple Intelligence reads your receipts: which lines are items, tax and the total, readable names, the store and the category. It runs entirely on your iPhone."),
             (symbol: "checkmark.shield.fill", text: "Every amount comes straight from the scan, and Tabbit picks the subtotal, tax and total that add up."),
             (symbol: "fuelpump.fill", text: "Better with gas receipts, HST and GST, \"SUB\" and \"FINAL\" totals, department headings and \"you saved\" lines."),
+            (symbol: "mappin.and.ellipse", text: "Scans now fill in the store's address, the time and how you paid, and say when the receipt doesn't show them."),
+            (symbol: "number", text: "Quantities and prices per item: \"2 @ 1.99\" and \"1.99/ea\" are worked out, and deals like \"2 for 1\" are never items."),
             (symbol: "hand.draw.fill", text: "Swipe a payment right to mark it paid, and swipe again to undo."),
             (symbol: "hand.tap.fill", text: "Buttons and cards press in on every tap, even quick ones, and swiped cards stay open."),
             (symbol: "circle.lefthalf.filled", text: "Smoother switching between light and dark, and a tidier profile editor."),

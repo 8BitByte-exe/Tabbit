@@ -55,8 +55,9 @@ Tabbit/
   Models/
     Person.swift             Person (me has the fixed Person.meID), displayName ("You")
     SplitGroup.swift         a group: name, category, members (me first), settlements
-    ReceiptRecord.swift      a saved receipt: SplitItem (assignees, empty = everyone), TipValue ($/%),
-                             autofilled/unreadable marks, raw scan + parser output; Settlement
+    ReceiptRecord.swift      a saved receipt: location, time (ClockTime), payment method, SplitItem (assignees,
+                             empty = everyone), TipValue ($/%), autofilled/unreadable marks, raw scan + parser
+                             output; Settlement
     Categories.swift         GroupCategory (12), SpendCategory (24): title, SF Symbol, pastel index
     Money.swift              formatting and whole-cent conversion
     MoneyInput.swift         parse typed amounts ("1.234,56", "$4", "0.50-")
@@ -97,6 +98,10 @@ Tabbit/
     ReceiptKeywords.swift      line roles with OCR-tolerant keywords (SJETOTAL → SUBTOTAL, TIP/GRATUITY),
                                included tax, discounts, rounding; German/Spanish/French/Italian/Dutch words
     AmountParser.swift         money amounts at the end of a line
+    LineAmountParser.swift     quantity and unit price ("2 @ 1.99", "2 BANANAS 1.99/EA", "1.25 LB @ 0.99"),
+                               worked-out line totals, the other reading ("1.99" each or for both), "2× " names
+    ReceiptDetailsParser.swift time of purchase, store address (street + city/postal lines), payment method
+                               (card brand, debit, cash; never digits), printed tax rate
     ReceiptDateParser.swift    purchase date (explicit patterns, not NSDataDetector)
     RulesReceiptParser.swift   the rules-based parser (fallback tier): items, sale/deal and weight lines,
                                codes/flags in names, discounts, tip (not tip guides), VAT-included
@@ -208,6 +213,11 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Department headings ("PRODUCE", "21-GROCERY") are not items and never take a stray price; "YOU SAVED" is never a purchase.
   - Store names come with store numbers and branches ("SHELL #1234", "Walmart, Toronto"); strip them.
   - Item names carry barcodes, PLU codes (3000–4999) and tax flags; strip them, but keep numbers that are part of the name ("1000 ISLAND").
+  - Every receipt has the same parts in different words and orders: merchant, address, date and time, items (name, quantity, price), subtotal, tax (amount and often a rate), tip, total and payment. Fill in each one, and mark the ones a scan didn't find (`ScanAutofill`), so the person can add them.
+  - Quantities come three ways: "2 @ 1.99 3.98" (quantity, unit price, total), "2 @ 1.99" or "2 BANANAS 1.99/EA" (only the unit price: work out the total), and "2 BANANAS 3.98" (the total). "2 BANANAS 1.99" is usually 1.99 for both; reconciliation may read it as 2 × 1.99 when the subtotal says so. Sizes ("12 PACK", "6 INCH") are not quantities.
+  - Deals ("2 FOR 1", "BUY 1 GET 1", "MIX & MATCH", "B1G1") describe prices and are never items; one with money off ("FREE", "GET") is a discount.
+  - Sanity checks: tax is always less than the total (and rarely over 30% of it); a printed rate ("HST 13%") confirms a tax; tips are usually 10/15/18/20% of the bill before or after tax; a card payment, or cash minus change, confirms the total and stands in for one that couldn't be read.
+  - The payment method is the name only ("Visa", "Debit", "Cash"), never card digits. Short or ordinary words ("MC", "BAR", "CARD") only count on a line that pays an amount.
 - **App icon:** `Tabbit/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`, a single 1024×1024 opaque PNG that iOS scales and masks.
   - It's generated from the owner's artwork `Design/AppIcon/app-icon-source.jpg` by `python3 Design/AppIcon/make_app_icon.py <source> <output>`. The script crops the tile out of the black mockup, repaints the old rounded corners, and adds a 6% background margin so iOS's mask doesn't clip the bunny's hole.
   - Rerun the script if the artwork changes.

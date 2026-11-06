@@ -22,6 +22,13 @@ struct NumberedReceipt {
         let role: ReceiptLineRole
         /// The lowest Vision confidence among the line's blocks.
         let confidence: Float
+        /// How many, and the price of one, if the line shows them ("2 @ 1.99", "2 BANANAS 1.99/EA").
+        var quantity: Decimal? = nil
+        var unitPrice: Decimal? = nil
+        /// The amount is quantity × unit price, because no line total is printed.
+        var isComputed: Bool = false
+        /// Another reading of the amount ("2 BANANAS 1.99" as 3.98), tried if the items don't add up.
+        var alternative: Decimal? = nil
     }
 
     /// Lines kept above the first amount (the store's name, address, date…).
@@ -41,7 +48,18 @@ struct NumberedReceipt {
 
     init(lines: [TextLine], maxCharacters: Int = ReceiptPrompt.maxCharacters) {
         self.lines = lines
-        let amounts = lines.map { line in AmountParser.trailingAmount(in: line.text) }
+        let roles = lines.map { line in NumberedReceipt.role(of: line) }
+        // Lines that may be items also read quantities and unit prices, the same as the rules parser.
+        let amounts: [LineAmount?] = lines.indices.map { (index: Int) -> LineAmount? in
+            let text = lines[index].text
+            if RulesReceiptParser.itemRoles.contains(roles[index]), let detail = LineAmountParser.read(text) {
+                return detail
+            }
+            guard let printed = AmountParser.trailingAmount(in: text) else {
+                return nil
+            }
+            return LineAmount(value: printed.value, textBefore: printed.textBefore)
+        }
         let firstAmount = amounts.firstIndex(where: { amount in amount != nil })
         let lastAmount = amounts.lastIndex(where: { amount in amount != nil })
 
@@ -85,8 +103,12 @@ struct NumberedReceipt {
                     text: trimmed,
                     amount: amount.value,
                     textBefore: amount.textBefore,
-                    role: NumberedReceipt.role(of: line),
-                    confidence: confidences.min() ?? 1
+                    role: roles[index],
+                    confidence: confidences.min() ?? 1,
+                    quantity: amount.quantity,
+                    unitPrice: amount.unitPrice,
+                    isComputed: amount.isComputed,
+                    alternative: amount.alternative
                 )
             }
             row += trimmed + "\n"
@@ -117,8 +139,8 @@ struct NumberedReceipt {
         }
         let text = lines[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.rangeOfCharacter(from: .letters) != nil,
-              AmountParser.trailingAmount(in: text) == nil,
-              !ReceiptKeywords.isHeading(text) else {
+              LineAmountParser.read(text) == nil,
+              !ReceiptKeywords.isHeading(text), !ReceiptKeywords.isDeal(text) else {
             return nil
         }
         return text
@@ -171,20 +193,22 @@ enum ReceiptPrompt {
     Every line that ends in an amount starts with a number in brackets, like [4]. \
     Give each numbered line exactly one kind:
     - item: something bought, including fuel, deposits and bag fees. \
-    When an item's name is on the line above its price, the price line is the item.
+    When an item's name is on the line above its price, the price line is the item. \
+    A quantity like "2 @ 1.99" or "2 BANANAS 1.99/EA" is still one item line.
     - discount: money taken off, like a coupon, member discount, markdown or instant savings.
     - subtotal: the amount before tax, like SUBTOTAL, SUB TOTAL, SUB or Total before tax.
-    - tax: one tax, like TAX, SALES TAX, HST, GST, PST, QST or VAT.
+    - tax: one tax, like TAX, SALES TAX, HST 13%, GST, PST, QST or VAT. Tax is always less than the total.
     - taxTotal: several taxes added up, like TOTAL TAX.
     - tip: a tip, gratuity or service charge that was added to the bill.
     - total: the final amount to pay, like TOTAL, FINAL, Total after tax, Sub with tax, AMOUNT DUE or BALANCE DUE.
     - payment: how it was paid or money given back, like VISA, DEBIT, CASH, TENDERED or CHANGE.
     - savings: "you saved", regular or original prices, points and rewards.
-    - unitPrice: a price per litre, gallon, kg, lb or each, or an amount of fuel or weight.
-    - other: anything else, like a heading, an account number, or a tip suggestion such as "18% = 7.20".
+    - unitPrice: a price per litre, gallon, kg or lb on a line of its own, or an amount of fuel or weight.
+    - other: anything else, like a heading, an account number, a deal such as "2 FOR 1" or "BUY 1 GET 1", \
+    or a tip suggestion such as "18% = 7.20".
 
     For every item and discount, write its name the way a person would say it: expand abbreviations, \
-    use normal capitalization, and drop codes, PLU numbers and tax letters. Keep it short. \
+    use normal capitalization, and drop codes, PLU numbers, quantities and tax letters. Keep it short. \
     Leave the name empty for every other kind.
 
     The store name is the business's brand only, like "Best Buy", "Shell" or "Trader Joe's", \

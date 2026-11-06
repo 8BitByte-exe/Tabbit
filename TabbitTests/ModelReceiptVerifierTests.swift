@@ -68,8 +68,12 @@ final class ModelReceiptVerifierTests: XCTestCase {
         XCTAssertEqual(receipt.parser, .appleIntelligence)
         XCTAssertEqual(receipt.merchant, "Trader Joe's")
         XCTAssertEqual(itemList(receipt), itemList([
-            ("Organic bananas", "1.29"), ("Organic milk", "4.99"), ("Avocados", "1.98"), ("Coupon", "-0.50"),
+            ("Organic bananas", "1.29"), ("Organic milk", "4.99"), ("2× Avocados", "1.98"), ("Coupon", "-0.50"),
         ]))
+        XCTAssertEqual(receipt.lineItems[2].quantity, money("2"))
+        XCTAssertEqual(receipt.lineItems[2].unitPrice, money("0.99"))
+        XCTAssertEqual(receipt.time, ClockTime(hour: 14, minute: 32))
+        XCTAssertEqual(receipt.paymentMethod, "Visa")
         XCTAssertEqual(receipt.subtotal, money("7.76"))
         XCTAssertEqual(receipt.tax, money("0.62"))
         XCTAssertEqual(receipt.total, money("8.38"))

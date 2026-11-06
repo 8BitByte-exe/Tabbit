@@ -20,12 +20,50 @@ struct CalendarDate: Equatable, Codable {
     }
 }
 
+/// A time of day as printed on a receipt ("2:32 PM", "14:32"), with no time zone.
+struct ClockTime: Equatable, Codable, Comparable {
+    /// 0–23.
+    let hour: Int
+    /// 0–59.
+    let minute: Int
+
+    /// "14:32"
+    var text24: String {
+        return (hour < 10 ? "0" : "") + String(hour) + ":" + (minute < 10 ? "0" : "") + String(minute)
+    }
+
+    /// The time on a given day, in the current calendar.
+    func date(on day: Date) -> Date {
+        let start = Calendar.current.startOfDay(for: day)
+        return Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: start) ?? start
+    }
+
+    init(hour: Int, minute: Int) {
+        self.hour = min(max(hour, 0), 23)
+        self.minute = min(max(minute, 0), 59)
+    }
+
+    init(_ date: Date) {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        self.init(hour: components.hour ?? 0, minute: components.minute ?? 0)
+    }
+
+    static func < (first: ClockTime, second: ClockTime) -> Bool {
+        return first.hour != second.hour ? first.hour < second.hour : first.minute < second.minute
+    }
+}
+
 /// One purchased item (or a discount, which has a negative amount).
 struct ReceiptLineItem: Equatable, Codable {
     let name: String
+    /// What the line costs in total (quantity × unit price).
     let amount: Decimal
     /// Vision's confidence in the text this item came from (0...1), if known.
     var confidence: Float? = nil
+    /// How many were bought, if the receipt says ("2 @ 1.99", "2 X", "QTY 2", "1.25 LB").
+    var quantity: Decimal? = nil
+    /// The price of one, if the receipt prints it.
+    var unitPrice: Decimal? = nil
 
     /// Below this confidence the app marks the name as uncertain.
     static let uncertainBelow: Float = 0.6
@@ -82,6 +120,14 @@ struct Receipt: Equatable, Codable {
     var total: Decimal?
     /// A printed tip or gratuity, if the receipt shows one.
     var tip: Decimal? = nil
+    /// The store's address as printed ("123 MAIN ST, SPRINGFIELD, IL 62701").
+    var location: String? = nil
+    /// The time of purchase.
+    var time: ClockTime? = nil
+    /// How it was paid: "Visa", "Debit", "Cash"…
+    var paymentMethod: String? = nil
+    /// Tax the receipt says is already in the prices ("HST INCLUDED 6.32"); not added on top.
+    var includedTax: Decimal? = nil
     var parser: ReceiptParserKind
     /// Short remarks about how the result was produced, shown to the user.
     var notes: [String]
@@ -133,6 +179,8 @@ extension ReceiptLineItem {
         case name
         case amount
         case confidence
+        case quantity
+        case unitPrice
     }
 
     init(from decoder: Decoder) throws {
@@ -141,6 +189,8 @@ extension ReceiptLineItem {
         let amount = try MoneyCoding.decode(container, forKey: .amount)
         let confidence = try container.decodeIfPresent(Float.self, forKey: .confidence)
         self.init(name: name, amount: amount, confidence: confidence)
+        self.quantity = try MoneyCoding.decodeIfPresent(container, forKey: .quantity)
+        self.unitPrice = try MoneyCoding.decodeIfPresent(container, forKey: .unitPrice)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -148,6 +198,8 @@ extension ReceiptLineItem {
         try container.encode(name, forKey: .name)
         try container.encode(MoneyCoding.text(amount), forKey: .amount)
         try container.encodeIfPresent(confidence, forKey: .confidence)
+        try container.encodeIfPresent(quantity.map { value in MoneyCoding.text(value) }, forKey: .quantity)
+        try container.encodeIfPresent(unitPrice.map { value in MoneyCoding.text(value) }, forKey: .unitPrice)
     }
 }
 
@@ -160,6 +212,10 @@ extension Receipt {
         case tax
         case total
         case tip
+        case location
+        case time
+        case paymentMethod
+        case includedTax
         case parser
         case notes
         case intelligence
@@ -175,6 +231,10 @@ extension Receipt {
             tax: try MoneyCoding.decodeIfPresent(container, forKey: .tax),
             total: try MoneyCoding.decodeIfPresent(container, forKey: .total),
             tip: try MoneyCoding.decodeIfPresent(container, forKey: .tip),
+            location: try container.decodeIfPresent(String.self, forKey: .location),
+            time: try? container.decodeIfPresent(ClockTime.self, forKey: .time),
+            paymentMethod: try container.decodeIfPresent(String.self, forKey: .paymentMethod),
+            includedTax: try MoneyCoding.decodeIfPresent(container, forKey: .includedTax),
             parser: try container.decodeIfPresent(ReceiptParserKind.self, forKey: .parser) ?? .rules,
             notes: try container.decodeIfPresent([String].self, forKey: .notes) ?? [],
             intelligence: try? container.decodeIfPresent(IntelligenceTrace.self, forKey: .intelligence)
@@ -190,6 +250,10 @@ extension Receipt {
         try container.encodeIfPresent(tax.map { value in MoneyCoding.text(value) }, forKey: .tax)
         try container.encodeIfPresent(total.map { value in MoneyCoding.text(value) }, forKey: .total)
         try container.encodeIfPresent(tip.map { value in MoneyCoding.text(value) }, forKey: .tip)
+        try container.encodeIfPresent(location, forKey: .location)
+        try container.encodeIfPresent(time, forKey: .time)
+        try container.encodeIfPresent(paymentMethod, forKey: .paymentMethod)
+        try container.encodeIfPresent(includedTax.map { value in MoneyCoding.text(value) }, forKey: .includedTax)
         try container.encode(parser, forKey: .parser)
         try container.encode(notes, forKey: .notes)
         try container.encodeIfPresent(intelligence, forKey: .intelligence)
