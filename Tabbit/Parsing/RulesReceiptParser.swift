@@ -36,6 +36,25 @@ struct RulesReceiptParser {
         return best ?? parse(scan, slopeChoice: 0)
     }
 
+    /// The tilt guess whose lines add up best, so Apple Intelligence reads the same lines.
+    static func bestSlopeChoice(for scan: ScanResult) -> Int {
+        let count = LineGrouper.slopeChoiceCount(for: scan)
+        guard count > 1 else {
+            return 0
+        }
+        let parser = RulesReceiptParser()
+        var bestChoice = 0
+        var bestScore = Int.min
+        for choice in 0..<count {
+            let score = consistencyScore(of: parser.parse(scan, slopeChoice: choice))
+            if score > bestScore {
+                bestChoice = choice
+                bestScore = score
+            }
+        }
+        return bestChoice
+    }
+
     /// Passed checks count for, failed checks against. Finding a total matters
     /// most, so a guess that loses the total can't win on a lucky match.
     static func consistencyScore(of receipt: Receipt) -> Int {
@@ -285,17 +304,29 @@ struct RulesReceiptParser {
         var lineAbove: AnalyzedLine?
         for line in lines[0..<regionEnd] {
             guard let amount = line.amount else {
-                lineAbove = hasLetters(line.text) ? line : nil
+                // A department heading ("PRODUCE") never lends its name to a price below it.
+                lineAbove = hasLetters(line.text) && !ReceiptKeywords.isHeading(line.text) ? line : nil
                 continue
             }
             let above = lineAbove
             lineAbove = nil
             if line.role == .payment || line.role == .notATotal || line.role == .tip
-                || line.role == .rounding || line.role == .includedTax {
+                || line.role == .rounding || line.role == .includedTax || line.role == .unitPrice {
                 continue
             }
 
             let value = amount.value
+            if value == 0 {
+                // "BAG 0.00", "MEMBER PRICE 0.00": nothing to split.
+                continue
+            }
+            if ReceiptKeywords.isHeading(amount.textBefore) {
+                // A heading that picked up a stray price. Left out unless the subtotal needs it.
+                candidates.append(makeCandidate(
+                    name: itemName(from: amount.textBefore), amount: value, confidence: line.confidence,
+                    included: false, ambiguous: true, label: line.text))
+                continue
+            }
             if line.role == .discount {
                 // Money off. Printed without a minus it's still a deduction, but
                 // reconciliation may leave it out if the numbers disagree.
@@ -324,10 +355,12 @@ struct RulesReceiptParser {
                         included: false, ambiguous: true, label: line.text))
                 }
             } else if line.role == .info {
+                // "REG PRICE 4.99" could still be the price paid; "YOU SAVED 2.98" never is.
                 let isDiscount = value < 0
+                let isSavings = ReceiptKeywords.isSavings(line.text)
                 candidates.append(makeCandidate(
                     name: itemName(from: amount.textBefore), amount: value, confidence: line.confidence,
-                    included: isDiscount, ambiguous: !isDiscount, label: line.text))
+                    included: isDiscount, ambiguous: !isDiscount && !isSavings, label: line.text))
             } else {
                 candidates.append(makeCandidate(
                     name: itemName(from: amount.textBefore), amount: value, confidence: line.confidence,
@@ -489,7 +522,30 @@ struct RulesReceiptParser {
         }
         let tallest = candidates.max { a, b in a.height < b.height } ?? first
         let chosen = tallest.height >= first.height * 1.3 ? tallest : first
-        return cleanName(chosen.text)
+        let name = storeName(from: chosen.text)
+        return name.isEmpty ? nil : name
+    }
+
+    // Store numbers after the name: "#1234", "STORE 0412", "NO. 12", or a number at the end.
+    private static let storeNumberPattern = Patterns.make(
+        #"\s*#\s*\d+|\s+(?:STORE|STORE\s+NO|NO|BRANCH|LOC)\.?\s*#?\s*\d+|\s+\d{3,}\s*$"#,
+        caseInsensitive: true
+    )
+
+    /// A store's name without its store number or the branch after a comma or dash:
+    /// "SHELL #1234" → "SHELL", "Walmart Supercentre, Toronto" → "Walmart Supercentre".
+    static func storeName(from text: String) -> String {
+        var name = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        for separator in [",", " - ", " – ", " | ", " · "] {
+            if let range = name.range(of: separator) {
+                let head = String(name[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                if head.count >= 2 {
+                    name = head
+                }
+            }
+        }
+        name = replace(storeNumberPattern, in: name, with: "")
+        return cleanName(name)
     }
 
     private static func isMerchantCandidate(_ text: String) -> Bool {

@@ -66,6 +66,33 @@ final class ReceiptKeywordsTests: XCTestCase {
             ("VAT INCLUDED 1.50", .includedTax),
             ("RÜCKGELD 14,50", .payment),
             ("TARJETA 12,40", .payment),
+            // Wordings from real receipts
+            ("SUB 45.67", .subtotal),
+            ("SUB TTL 45.67", .subtotal),
+            ("TURKEY SUB 8.99", .other),
+            ("Total before tax 49.99", .subtotal),
+            ("Total after tax 56.49", .strongTotal),
+            ("Sub with tax 56.49", .strongTotal),
+            ("SUB W/ TAX 56.49", .strongTotal),
+            ("After tax 56.49", .strongTotal),
+            ("FINAL 56.49", .strongTotal),
+            ("FINAL TOTAL 56.49", .strongTotal),
+            ("FINAL SALE JACKET 40.00", .other),
+            ("HST 13% 6.50", .tax),
+            ("H.S.T. 6.50", .tax),
+            ("GST/HST 6.50", .tax),
+            ("TPS 2.50", .tax),
+            ("TVQ 4.99", .tax),
+            ("GST/HST INCLUDED 6.32", .includedTax),
+            ("TOTAL TAX 2.40", .taxTotal),
+            ("PRICE/L 1.67", .unitPrice),
+            ("PRICE PER LITRE 1.67", .unitPrice),
+            ("UNIT PRICE 0.99", .unitPrice),
+            ("LITRES 32.89", .unitPrice),
+            ("1.25 LB @ 0.59/LB 0.74", .other),
+            ("FUEL TOTAL 54.92", .other),
+            ("YOU SAVED 2.98", .info),
+            ("YOUSAVED 2.98", .info),
         ]
         for (text, role) in expectations {
             XCTAssertEqual(ReceiptKeywords.role(for: text), role, "\"\(text)\"")
@@ -81,5 +108,22 @@ final class ReceiptKeywordsTests: XCTestCase {
         XCTAssertTrue(ReceiptKeywords.isDetailOnly("0,456 KG X 3,99 EUR/KG"))
         XCTAssertTrue(ReceiptKeywords.isDetailOnly("2 STK X 1,29"))
         XCTAssertFalse(ReceiptKeywords.isDetailOnly("SODA"))
+    }
+
+    func testHeadingsSavingsAndInitials() {
+        XCTAssertTrue(ReceiptKeywords.isHeading("PRODUCE"))
+        XCTAssertTrue(ReceiptKeywords.isHeading("21-GROCERY"))
+        XCTAssertTrue(ReceiptKeywords.isHeading("HEALTH & BEAUTY"))
+        XCTAssertFalse(ReceiptKeywords.isHeading("PRODUCE BOX"))
+        XCTAssertFalse(ReceiptKeywords.isHeading("BANANAS"))
+        XCTAssertFalse(ReceiptKeywords.isHeading("4.99"))
+
+        XCTAssertTrue(ReceiptKeywords.isSavings("YOU SAVED 2.98"))
+        XCTAssertTrue(ReceiptKeywords.isSavings("TOTAL SAVINGS 4.00"))
+        XCTAssertFalse(ReceiptKeywords.isSavings("REG PRICE 4.99"))
+
+        XCTAssertEqual(ReceiptKeywords.joiningInitials(["H", "S", "T", "6", "50"]), ["HST", "6", "50"])
+        XCTAssertEqual(ReceiptKeywords.joiningInitials(["MILK", "4", "99", "T"]), ["MILK", "4", "99", "T"])
+        XCTAssertEqual(ReceiptKeywords.joiningInitials(["2", "X", "BURGER"]), ["2", "X", "BURGER"])
     }
 }

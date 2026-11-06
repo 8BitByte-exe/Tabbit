@@ -73,11 +73,14 @@ Tabbit/
     ScanAutofill.swift       ProcessedScan → ReceiptRecord with marks; CategoryGuesser
     AppInfo.swift            Changelog (What's New), StorageUsage
   Intelligence/              Apple Intelligence (roadmap tier 1), all on-device
-    ReceiptIntelligence.swift  status (IntelligenceStatus), Settings toggle, refine(ProcessedScan), timeout
-    AppleIntelligenceReader.swift  FoundationModels only (#if canImport, iOS 26): @Generable receipt, session
-    ModelReceiptVerifier.swift ModelReceiptDraft (plain Swift), ScanEvidence, the checks that decide
-                               between the model's reading and the rules' (fully unit-tested)
-    ReceiptPrompt.swift        instructions + the receipt's lines as the prompt
+    ReceiptIntelligence.swift  status (IntelligenceStatus), Settings toggle, refine(ProcessedScan),
+                               timeout, retry with a shorter prompt, IntelligenceTrace
+    AppleIntelligenceReader.swift  FoundationModels only (#if canImport, iOS 26): @Generable line labels
+                               (no optional fields), session, error checks
+    ModelReceiptVerifier.swift ModelReceiptReading (plain Swift labels), ScanEvidence, assemble():
+                               amounts from the scan, totals chosen by arithmetic, disputed lines
+                               reconciled, compared with the rules (fully unit-tested)
+    ReceiptPrompt.swift        NumberedReceipt ("[4] HST 13% 6.50": numbered amount lines) + instructions
   Storage/
     TabbitStore.swift        @MainActor store: Application Support/Receipts/{profile.json, groups.json,
                              <id>/receipt.json, page-N.jpg, thumbnail.jpg}; no iCloud Backup; complete
@@ -200,6 +203,10 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Keywords that are also ordinary words need exact matching ("SUMME" fuzzily matches "SUMMER", "BAR" is cash in German but also a chocolate bar). Only fuzz long, distinctive keywords.
   - Discounts are sometimes printed without a minus; treat them as deductions, and let reconciliation undo that if the subtotal disagrees.
   - Tip guides ("18% $7.20") printed under the total are not tips.
+  - Wordings vary: "SUB", "Total before tax" and "Subtotal excl. tax" are the subtotal; "FINAL", "Total after tax", "Sub with tax" are the total; "TOTAL TAX" is the tax; "H.S.T." is HST; TPS/TVQ/TVH are Quebec's GST/QST/HST.
+  - Gas receipts: "PRICE/L", "LITRES" and per-unit prices are never purchases, and "FUEL TOTAL" is the fuel bought.
+  - Department headings ("PRODUCE", "21-GROCERY") are not items and never take a stray price; "YOU SAVED" is never a purchase.
+  - Store names come with store numbers and branches ("SHELL #1234", "Walmart, Toronto"); strip them.
   - Item names carry barcodes, PLU codes (3000–4999) and tax flags; strip them, but keep numbers that are part of the name ("1000 ISLAND").
 - **App icon:** `Tabbit/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`, a single 1024×1024 opaque PNG that iOS scales and masks.
   - It's generated from the owner's artwork `Design/AppIcon/app-icon-source.jpg` by `python3 Design/AppIcon/make_app_icon.py <source> <output>`. The script crops the tile out of the black mockup, repaints the old rounded corners, and adds a 6% background margin so iOS's mask doesn't clip the bunny's hole.
@@ -225,9 +232,10 @@ The design is tiered and entirely on-device. Each phone gets the best tier it su
    - **Done:** accuracy pass after the first real-world test (v0.3): tilt handling, fuzzy keywords, sale/deal lines, reconciliation, OCR settings, uncertain-name marks, redacted exports.
    - Next: real exported receipts as fixtures.
 3. **In progress:** iOS 26 tiers.
-   - **Done (v1.1):** Foundation Models (tier 1). `AppleIntelligenceReader` fills a `@Generable` receipt from the rebuilt lines; `ModelReceiptVerifier` accepts it only if every amount is printed on the scan, every item matches scan text and `ReceiptValidator` passes; otherwise the rules result is kept with a note. The model's store name and category are used when they're on the receipt either way. 25 s timeout. Settings has a status row and an on/off toggle. `ReceiptParserKind.appleIntelligence` marks receipts it read.
+   - **Done (v1.1):** Foundation Models (tier 1). The prompt numbers every rebuilt line that ends in an amount; the model labels each number (item, discount, subtotal, tax, taxTotal, tip, total, payment, savings, unitPrice, other), names the items and gives the brand name, category and date. It never writes an amount: `ModelReceiptVerifier` takes them from the scan, tries the subtotal/tax/tip/total combinations (model labels first, keywords as a second opinion) and keeps the one that adds up, flips lines where the model and the keywords disagree when exactly one fix makes the items match, and uses the model's receipt unless the rules' adds up better. Item names must plausibly spell out the printed text; store names must be on the scan and lose store numbers and branches. 45 s timeout; a too-long receipt is retried shorter. Settings has a status row and an on/off toggle. `ReceiptParserKind.appleIntelligence` marks receipts it read, and `Receipt.intelligence` (an `IntelligenceTrace`) keeps the model's raw labels for Export Scan Data.
+   - Lesson from the first 1.1 build: with optional `@Generable` fields the model left the total empty on every receipt, so every reading was rejected. Keep every generated field required (empty string or 0 for "none"), and never let the model copy numbers.
    - Next: Vision's document reader (`RecognizeDocumentsRequest`, tier 2) for better rows and amounts.
-   - The model can only be tested on the phone; CI runners can't run Apple Intelligence, so tests feed `ModelReceiptDraft`s to the verifier.
+   - The model can only be tested on the phone; CI runners can't run Apple Intelligence, so tests feed `ModelReceiptReading`s (line labels, right and wrong) to the verifier. When a real receipt reads badly, ask the owner for its Export Scan Data: the `intelligence` trace shows each label the model gave.
 4. **Done:** saving with editing (v0.4): design system, saved receipts, editable receipt screen, on-device storage with photos.
 5. **Done (v1.0):** splitting.
    - Groups, people, item assignment, tax/tip fees, Settle Up with Mark Paid, My Receipts with search and sort.

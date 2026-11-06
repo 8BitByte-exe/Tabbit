@@ -316,7 +316,7 @@ final class RulesReceiptParserTests: XCTestCase {
             .row("FRESH MART")
             .row("CHIPS", "3.99")
             .row("REG PRICE", "1.00")
-            .row("YOU SAVE", "1.00")
+            .row("SALE PRICE", "1.00")
             .row("SUBTOTAL", "4.99")
             .row("TOTAL", "4.99")
             .build()
@@ -499,5 +499,92 @@ final class RulesReceiptParserTests: XCTestCase {
             .row("TOTAL", "12.00")
             .build()
         XCTAssertEqual(parser.parse(scan).merchant, "SUNNY SIDE DINER")
+    }
+
+    // MARK: - Wordings from real receipts
+
+    func testYouSavedIsNeverCounted() {
+        let scan = ReceiptLayoutBuilder()
+            .row("FRESH MART")
+            .row("CHIPS", "3.99")
+            .row("YOU SAVED", "1.00")
+            .row("SUBTOTAL", "4.99")
+            .row("TOTAL", "4.99")
+            .build()
+        XCTAssertEqual(itemList(parser.parse(scan)), itemList([("CHIPS", "3.99")]))
+    }
+
+    func testGasReceiptWithPricePerLitre() {
+        let scan = ReceiptLayoutBuilder()
+            .row("SHELL #1234", height: 0.03)
+            .row("PUMP 05 REGULAR")
+            .row("PRICE/L", "1.67")
+            .row("LITRES", "32.89")
+            .row("FUEL TOTAL", "54.92")
+            .row("TOTAL", "54.92")
+            .row("GST/HST INCLUDED", "6.32")
+            .row("VISA", "54.92")
+            .build()
+        let receipt = parser.parse(scan)
+        XCTAssertEqual(receipt.merchant, "SHELL")
+        XCTAssertEqual(itemList(receipt), itemList([("FUEL TOTAL", "54.92")]))
+        XCTAssertEqual(receipt.total, money("54.92"))
+        XCTAssertNil(receipt.tax)
+        XCTAssertTrue(ReceiptValidator.checks(for: receipt).allSatisfy { check in check.passed })
+    }
+
+    func testHeadingsDoNotBecomeItems() {
+        let scan = ReceiptLayoutBuilder()
+            .row("NO FRILLS")
+            .row("21-GROCERY")
+            .row("PASTA", "2.49")
+            .row("27-PRODUCE")
+            .priceRow("1.29")
+            .row("BANANAS")
+            .row("SUBTOTAL", "3.78")
+            .row("TOTAL", "3.78")
+            .build()
+        let receipt = parser.parse(scan)
+        XCTAssertEqual(itemList(receipt), itemList([("PASTA", "2.49"), ("BANANAS", "1.29")]))
+    }
+
+    func testTotalBeforeAndAfterTax() {
+        let scan = ReceiptLayoutBuilder()
+            .row("CORNER STORE")
+            .row("CHIPS", "3.00")
+            .row("SODA", "2.00")
+            .row("Total before tax", "5.00")
+            .row("H.S.T.", "0.65")
+            .row("Total after tax", "5.65")
+            .build()
+        let receipt = parser.parse(scan)
+        XCTAssertEqual(itemList(receipt), itemList([("CHIPS", "3.00"), ("SODA", "2.00")]))
+        XCTAssertEqual(receipt.subtotal, money("5.00"))
+        XCTAssertEqual(receipt.tax, money("0.65"))
+        XCTAssertEqual(receipt.total, money("5.65"))
+    }
+
+    func testSubAndFinal() {
+        let scan = ReceiptLayoutBuilder()
+            .row("CORNER STORE")
+            .row("CHIPS", "3.00")
+            .row("SODA", "2.00")
+            .row("SUB", "5.00")
+            .row("GST", "0.25")
+            .row("FINAL", "5.25")
+            .build()
+        let receipt = parser.parse(scan)
+        XCTAssertEqual(receipt.subtotal, money("5.00"))
+        XCTAssertEqual(receipt.tax, money("0.25"))
+        XCTAssertEqual(receipt.total, money("5.25"))
+    }
+
+    func testStoreNameWithoutStoreNumberOrBranch() {
+        XCTAssertEqual(RulesReceiptParser.storeName(from: "SHELL #1234"), "SHELL")
+        XCTAssertEqual(RulesReceiptParser.storeName(from: "WALMART STORE 3045"), "WALMART")
+        XCTAssertEqual(RulesReceiptParser.storeName(from: "Walmart Supercentre, Toronto ON"), "Walmart Supercentre")
+        XCTAssertEqual(RulesReceiptParser.storeName(from: "BEST BUY - EATON CENTRE"), "BEST BUY")
+        XCTAssertEqual(RulesReceiptParser.storeName(from: "PIER 39 CAFE"), "PIER 39 CAFE")
+        XCTAssertEqual(RulesReceiptParser.storeName(from: "7-ELEVEN"), "7-ELEVEN")
     }
 }

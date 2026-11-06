@@ -55,6 +55,21 @@ enum ReceiptParserKind: String, Equatable, Codable {
     }
 }
 
+/// What Apple Intelligence answered for a scan. Not shown in the app: it goes into
+/// Export Scan Data, so a receipt it misread can be looked into and turned into a test.
+struct IntelligenceTrace: Equatable, Codable {
+    /// "used", "rules", or what went wrong.
+    var outcome: String
+    /// How long the model took, in seconds.
+    var seconds: Double?
+    var storeName: String?
+    var category: String?
+    var date: String?
+    var pricesIncludeTax: Bool?
+    /// One per labelled line: "[3] item: Organic bananas".
+    var labels: [String] = []
+}
+
 /// The structured result of parsing one scanned receipt.
 /// Every field is optional because real receipts don't always show it
 /// (or OCR didn't read it).
@@ -70,6 +85,8 @@ struct Receipt: Equatable, Codable {
     var parser: ReceiptParserKind
     /// Short remarks about how the result was produced, shown to the user.
     var notes: [String]
+    /// What Apple Intelligence answered, if it read this scan. Kept for Export Scan Data.
+    var intelligence: IntelligenceTrace? = nil
 
     /// The sum of all line item amounts (discounts included).
     var itemsTotal: Decimal {
@@ -145,6 +162,7 @@ extension Receipt {
         case tip
         case parser
         case notes
+        case intelligence
     }
 
     init(from decoder: Decoder) throws {
@@ -158,7 +176,8 @@ extension Receipt {
             total: try MoneyCoding.decodeIfPresent(container, forKey: .total),
             tip: try MoneyCoding.decodeIfPresent(container, forKey: .tip),
             parser: try container.decodeIfPresent(ReceiptParserKind.self, forKey: .parser) ?? .rules,
-            notes: try container.decodeIfPresent([String].self, forKey: .notes) ?? []
+            notes: try container.decodeIfPresent([String].self, forKey: .notes) ?? [],
+            intelligence: try? container.decodeIfPresent(IntelligenceTrace.self, forKey: .intelligence)
         )
     }
 
@@ -173,6 +192,7 @@ extension Receipt {
         try container.encodeIfPresent(tip.map { value in MoneyCoding.text(value) }, forKey: .tip)
         try container.encode(parser, forKey: .parser)
         try container.encode(notes, forKey: .notes)
+        try container.encodeIfPresent(intelligence, forKey: .intelligence)
     }
 }
 

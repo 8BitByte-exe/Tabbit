@@ -40,17 +40,19 @@ enum IntelligenceStatus: Equatable {
 
 /// The Apple Intelligence step of reading a receipt (roadmap tier 1).
 ///
-/// Runs after OCR and the rules parser. The model reads the receipt's lines, and
-/// `ModelReceiptVerifier` checks every number against the scan before anything is
-/// used. If the model isn't available, is switched off, fails or takes too long,
-/// the rules result is kept. Everything runs on the device.
+/// Runs after OCR and the rules parser, on the same rebuilt lines. The model labels
+/// every line that ends in an amount (item, tax, total…) and names the items and the
+/// store; `ModelReceiptVerifier` takes the amounts from the scan and lets the
+/// arithmetic settle the totals. If the model isn't available, is switched off, fails
+/// or takes too long, the rules result is kept. Everything runs on the device.
 enum ReceiptIntelligence {
 
     /// Settings toggle (on by default).
     static let enabledKey = "appleIntelligence.enabled"
 
-    /// Give up and keep the rules result after this long (seconds).
-    static let timeout: Double = 25
+    /// Give up and keep the rules result after this long (seconds). The model writes one
+    /// short label per amount line, which takes a while on a long receipt.
+    static let timeout: Double = 45
 
     static var isEnabled: Bool {
         return UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
@@ -70,37 +72,63 @@ enum ReceiptIntelligence {
         return isEnabled && status == .available
     }
 
-    /// The scan with the model's checked reading, or unchanged if the model can't help.
+    /// The scan with the model's reading, or unchanged if the model can't help.
     static func refine(_ processed: ProcessedScan) async -> ProcessedScan {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             guard willRun else {
                 return processed
             }
-            let prompt = ReceiptPrompt.make(for: processed.scan)
-            guard !prompt.isEmpty else {
-                return processed
-            }
+            let slopeChoice = RulesReceiptParser.bestSlopeChoice(for: processed.scan)
+            var budget = ReceiptPrompt.maxCharacters
             var result = processed
-            do {
-                let draft = try await withTimeout(seconds: timeout) {
-                    try await AppleIntelligenceReader.read(prompt: prompt)
+            let started = Date()
+            while true {
+                let numbered = NumberedReceipt(scan: processed.scan, slopeChoice: slopeChoice, maxCharacters: budget)
+                let prompt = ReceiptPrompt.make(for: numbered)
+                guard !prompt.isEmpty else {
+                    // Nothing with an amount on it: the rules result stands.
+                    return processed
                 }
-                let outcome = ModelReceiptVerifier.evaluate(draft, scan: processed.scan, rules: processed.receipt)
-                result.receipt = outcome.receipt
-                result.suggestedCategory = outcome.suggestedCategory
-            } catch {
-                result.receipt.notes.append(ModelReceiptVerifier.unavailableNote)
+                let remaining = timeout - Date().timeIntervalSince(started)
+                do {
+                    let reading = try await withTimeout(seconds: max(remaining, 1)) {
+                        try await AppleIntelligenceReader.read(prompt: prompt)
+                    }
+                    let outcome = ModelReceiptVerifier.evaluate(reading, numbered: numbered, rules: processed.receipt)
+                    result.receipt = outcome.receipt
+                    result.suggestedCategory = outcome.suggestedCategory
+                    result.receipt.intelligence = ModelReceiptVerifier.trace(
+                        of: reading, numbered: numbered, outcome: outcome,
+                        seconds: Date().timeIntervalSince(started))
+                    return result
+                } catch {
+                    // A receipt too long for the model's context: try again with less of it.
+                    if AppleIntelligenceReader.isTooLong(error) && budget > 1_200 {
+                        budget = budget * 6 / 10
+                        continue
+                    }
+                    var note = ModelReceiptVerifier.unavailableNote
+                    if error is TimedOut {
+                        note = ModelReceiptVerifier.timedOutNote
+                    } else if AppleIntelligenceReader.isGuardrail(error) {
+                        note = "Apple's safety filter stopped Apple Intelligence from reading this receipt, so Tabbit used its built-in rules."
+                    }
+                    result.receipt.notes.append(note)
+                    result.receipt.intelligence = IntelligenceTrace(
+                        outcome: "error: \(String(describing: error))",
+                        seconds: Date().timeIntervalSince(started))
+                    return result
+                }
             }
-            return result
         }
         #endif
         return processed
     }
 
-    private struct TimedOut: Error {}
+    struct TimedOut: Error {}
 
-    /// Runs `operation`, but throws if it takes longer than `seconds`.
+    /// Runs `operation`, but throws `TimedOut` if it takes longer than `seconds`.
     static func withTimeout<T: Sendable>(seconds: Double,
                                          _ operation: @escaping @Sendable () async throws -> T) async throws -> T {
         return try await withThrowingTaskGroup(of: T.self) { group in
