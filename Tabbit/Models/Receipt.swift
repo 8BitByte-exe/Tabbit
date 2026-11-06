@@ -61,6 +61,8 @@ struct Receipt: Equatable, Codable {
     var subtotal: Decimal?
     var tax: Decimal?
     var total: Decimal?
+    /// A printed tip or gratuity, if the receipt shows one.
+    var tip: Decimal? = nil
     var parser: ReceiptParserKind
     /// Short remarks about how the result was produced, shown to the user.
     var notes: [String]
@@ -136,6 +138,7 @@ extension Receipt {
         case subtotal
         case tax
         case total
+        case tip
         case parser
         case notes
     }
@@ -149,6 +152,7 @@ extension Receipt {
             subtotal: try MoneyCoding.decodeIfPresent(container, forKey: .subtotal),
             tax: try MoneyCoding.decodeIfPresent(container, forKey: .tax),
             total: try MoneyCoding.decodeIfPresent(container, forKey: .total),
+            tip: try MoneyCoding.decodeIfPresent(container, forKey: .tip),
             parser: try container.decodeIfPresent(ReceiptParserKind.self, forKey: .parser) ?? .rules,
             notes: try container.decodeIfPresent([String].self, forKey: .notes) ?? []
         )
@@ -162,7 +166,24 @@ extension Receipt {
         try container.encodeIfPresent(subtotal.map { value in MoneyCoding.text(value) }, forKey: .subtotal)
         try container.encodeIfPresent(tax.map { value in MoneyCoding.text(value) }, forKey: .tax)
         try container.encodeIfPresent(total.map { value in MoneyCoding.text(value) }, forKey: .total)
+        try container.encodeIfPresent(tip.map { value in MoneyCoding.text(value) }, forKey: .tip)
         try container.encode(parser, forKey: .parser)
         try container.encode(notes, forKey: .notes)
+    }
+}
+
+extension CalendarDate {
+    /// Midnight of this day in the current calendar.
+    var dateValue: Date? {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        return Calendar.current.date(from: components)
+    }
+
+    init(_ date: Date) {
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        self.init(year: components.year ?? 2000, month: components.month ?? 1, day: components.day ?? 1)
     }
 }

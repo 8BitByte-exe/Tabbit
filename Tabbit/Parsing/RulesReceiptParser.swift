@@ -11,7 +11,13 @@ import Foundation
 ///    equals the items above it is taken as the subtotal.
 /// 5. If the items don't add up to the subtotal, try counting or leaving out the
 ///    lines that could go either way, and note what was changed.
-/// 6. The merchant is the first name-like line at the top; the date is the first date found.
+/// 6. The merchant is the biggest (or else the first) name-like line at the top; the date is
+///    the first date found.
+///
+/// Also handled: quantity, weight and unit lines in English and European formats; barcodes,
+/// PLU codes and tax flags in names; discounts printed without a minus; cash rounding;
+/// tax that's already included in the prices (common in Europe); tip guides under the total;
+/// and total, tax and payment words in German, Spanish, French, Italian and Dutch.
 struct RulesReceiptParser {
 
     func parse(_ scan: ScanResult) -> Receipt {
@@ -57,13 +63,16 @@ struct RulesReceiptParser {
             (line.role == .total || line.role == .strongTotal) && line.amount != nil
         })
         let taxLines = Array(lines[0..<(firstTotalIndex ?? lines.count)])
-        let tax = RulesReceiptParser.findTax(in: taxLines, notes: &notes)
+        var tax = RulesReceiptParser.findTax(in: taxLines, notes: &notes)
+        let tip = RulesReceiptParser.findTip(in: lines, firstTotalIndex: firstTotalIndex)
+        let rounding = RulesReceiptParser.firstAmount(in: taxLines, role: .rounding) ?? Decimal(0)
+        var fees = (tax ?? Decimal(0)) + (tip ?? Decimal(0)) + rounding
 
         var candidates = RulesReceiptParser.itemCandidates(in: lines)
 
         if subtotal == nil {
             let totals = RulesReceiptParser.totalAmounts(in: lines)
-            if let inferred = RulesReceiptParser.inferSubtotal(from: &candidates, tax: tax, totals: totals) {
+            if let inferred = RulesReceiptParser.inferSubtotal(from: &candidates, tax: fees, totals: totals) {
                 subtotal = inferred.value
                 notes.append("Read \"\(inferred.label)\" as the subtotal, because it equals the items above it.")
             }
@@ -72,11 +81,31 @@ struct RulesReceiptParser {
         // What the total should be, if the receipt adds up.
         var expectedTotal: Decimal?
         if let subtotal = subtotal {
-            expectedTotal = subtotal + (tax ?? Decimal(0))
+            expectedTotal = subtotal + fees
         } else if candidates.contains(where: { candidate in candidate.included }) {
-            expectedTotal = RulesReceiptParser.includedSum(candidates) + (tax ?? Decimal(0))
+            expectedTotal = RulesReceiptParser.includedSum(candidates) + fees
         }
-        let total = RulesReceiptParser.findTotal(in: lines, expected: expectedTotal)
+        var total = RulesReceiptParser.findTotal(in: lines, expected: expectedTotal)
+
+        // Prices that already include the tax (usual in Europe): the items alone add up
+        // to the total, and adding the tax would count it twice.
+        if let foundTax = tax, foundTax != 0, subtotal == nil {
+            let itemsSum = RulesReceiptParser.includedSum(candidates)
+            let withoutTax = itemsSum + (tip ?? Decimal(0)) + rounding
+            let totals = RulesReceiptParser.totalAmounts(in: lines)
+            if let matching = totals.first(where: { value in ReceiptValidator.matches(value, withoutTax) }),
+               !totals.contains(where: { value in ReceiptValidator.matches(value, withoutTax + foundTax) }) {
+                tax = nil
+                fees -= foundTax
+                total = matching
+                notes.append("The prices already include \(MoneyInput.editText(foundTax)) tax, so it isn't added again.")
+            }
+        }
+        if let included = RulesReceiptParser.firstAmount(in: lines, role: .includedTax), tax == nil {
+            if !notes.contains(where: { note in note.hasPrefix("The prices already include") }) {
+                notes.append("The prices already include \(MoneyInput.editText(included)) tax.")
+            }
+        }
 
         // Make the items agree with the subtotal (or with total minus tax).
         if let subtotal = subtotal {
@@ -84,7 +113,7 @@ struct RulesReceiptParser {
                 notes.append(note)
             }
         } else if let total = total {
-            let target = total - (tax ?? Decimal(0))
+            let target = total - fees
             if let note = RulesReceiptParser.reconcile(&candidates, target: target, targetName: "total") {
                 notes.append(note)
             }
@@ -101,6 +130,7 @@ struct RulesReceiptParser {
             subtotal: subtotal,
             tax: tax,
             total: total,
+            tip: tip,
             parser: .rules,
             notes: notes
         )
@@ -115,10 +145,14 @@ struct RulesReceiptParser {
         let role: ReceiptLineRole
         /// The lowest Vision confidence among the line's blocks.
         let confidence: Float
+        /// Text height (normalized), to spot the big store name at the top.
+        let height: CGFloat
 
         init(_ line: TextLine) {
             self.text = line.text
             self.pageIndex = line.pageIndex
+            let heights = line.blocks.map { block in block.boundingBox.height }
+            self.height = heights.max() ?? line.boundingBox.height
             self.amount = AmountParser.trailingAmount(in: line.text)
 
             // If the top reading isn't a summary line but one of Vision's other
@@ -170,6 +204,37 @@ struct RulesReceiptParser {
         let plain = lines.compactMap { line in line.role == .total ? line.amount?.value : nil }
         let candidates = strong.isEmpty ? plain : strong
         return candidates.max()
+    }
+
+    /// The tip, if the receipt has one. Above the total any tip line counts. Below it,
+    /// lines with a "%" ("18% TIP 7.20") are a printed tip guide, not a tip, unless a later
+    /// total includes them.
+    private static func findTip(in lines: [AnalyzedLine], firstTotalIndex: Int?) -> Decimal? {
+        let boundary = firstTotalIndex ?? lines.count
+        for (index, line) in lines.enumerated() where line.role == .tip {
+            guard let value = line.amount?.value else {
+                continue
+            }
+            if index < boundary {
+                return value
+            }
+            let isGuide = line.text.contains("%")
+                || ReceiptKeywords.words(in: line.text).contains(where: { word in
+                    word.hasPrefix("GUIDE") || word.hasPrefix("SUGGEST")
+                })
+            if isGuide {
+                continue
+            }
+            // A tip written under the total counts when a later total includes it.
+            let firstTotal = lines[boundary].amount?.value ?? Decimal(0)
+            let laterTotals = lines[(index + 1)...].compactMap { later in
+                (later.role == .total || later.role == .strongTotal) ? later.amount?.value : nil
+            }
+            if laterTotals.contains(where: { later in ReceiptValidator.matches(later, firstTotal + value) }) {
+                return value
+            }
+        }
+        return nil
     }
 
     /// Uses a "TOTAL TAX" line if there is one, otherwise adds up the tax lines
@@ -225,11 +290,21 @@ struct RulesReceiptParser {
             }
             let above = lineAbove
             lineAbove = nil
-            if line.role == .payment || line.role == .notATotal {
+            if line.role == .payment || line.role == .notATotal || line.role == .tip
+                || line.role == .rounding || line.role == .includedTax {
                 continue
             }
 
             let value = amount.value
+            if line.role == .discount {
+                // Money off. Printed without a minus it's still a deduction, but
+                // reconciliation may leave it out if the numbers disagree.
+                let name = itemName(from: amount.textBefore)
+                candidates.append(makeCandidate(
+                    name: name.isEmpty ? "Discount" : name, amount: value < 0 ? value : -value,
+                    confidence: line.confidence, included: true, ambiguous: value > 0, label: line.text))
+                continue
+            }
             if ReceiptKeywords.isDetailOnly(amount.textBefore) {
                 if let above = above {
                     // "AVOCADO" then "2 @ 0.99   1.98": the price belongs to the name above.
@@ -363,19 +438,37 @@ struct RulesReceiptParser {
         caseInsensitive: true
     )
 
-    /// The item name from the text before a price, without quantity/deal fragments.
-    private static func itemName(from text: String) -> String {
-        let nsText = text as NSString
-        let stripped = detailFragmentPattern.stringByReplacingMatches(
-            in: text, options: [], range: NSRange(location: 0, length: nsText.length), withTemplate: " ")
-        let cleaned = cleanName(stripped)
+    // Barcodes, PLU and article numbers: 5 or more digits standing alone ("4011", short
+    // PLUs, are kept only if they're the whole name). A tax flag right after a code goes too:
+    // "GV MILK 007874235186 F".
+    private static let codePattern = Patterns.make(#"(?:^|\s)\d{5,}(?:\s+[A-Z]{1,2})?(?=\s|$)"#)
+    // Produce PLU codes run 3000–4999 ("4011 BANANAS").
+    private static let leadingPLUPattern = Patterns.make(#"^[34]\d{3}\s+(?=[A-Za-z])"#)
+    // "2 X BURGER", "2x Burger" → "2× Burger".
+    private static let leadingQuantityPattern = Patterns.make(#"^(\d{1,2})\s*[xX×*]\s+(?=[A-Za-z])"#)
+
+    /// The item name from the text before a price, without quantity/deal fragments,
+    /// barcodes or tax flags.
+    static func itemName(from text: String) -> String {
+        var working = text
+        working = replace(detailFragmentPattern, in: working, with: " ")
+        working = replace(codePattern, in: working, with: " ")
+        working = replace(leadingPLUPattern, in: working, with: "")
+        working = replace(leadingQuantityPattern, in: working, with: "$1× ")
+        let cleaned = cleanName(working)
         return hasLetters(cleaned) ? cleaned : cleanName(text)
+    }
+
+    private static func replace(_ pattern: NSRegularExpression, in text: String, with template: String) -> String {
+        let length = (text as NSString).length
+        return pattern.stringByReplacingMatches(in: text, options: [], range: NSRange(location: 0, length: length),
+                                                withTemplate: template)
     }
 
     // MARK: - Merchant
 
     private static let merchantNoisePattern = Patterns.make(
-        #"\b(WELCOME|THANK|THANKS|RECEIPT|INVOICE|TEL|PHONE|FAX|CASHIER|REGISTER|TERMINAL|ORDER|TABLE|SERVER|GUEST|DATE|TIME|TRANS|TRANSACTION|COPY|MERCHANT)\b|\bSTORE\s*(#|NO\b)|WWW\.|HTTPS?:|\.COM\b"#
+        #"\b(WELCOME|THANK|THANKS|RECEIPT|INVOICE|TEL|PHONE|FAX|CASHIER|REGISTER|TERMINAL|ORDER|TABLE|SERVER|GUEST|DATE|TIME|TRANS|TRANSACTION|COPY|MERCHANT|HOURS|OPEN|WIFI|PASSWORD|VAT|ABN|GST|NIF|CIF|UST|STEUERNR|KASSE|BON|BELEG|RECHNUNG|QUITTUNG|FACTURA|TICKET|CHECK|SALE|DUPLICATE|REPRINT)\b|\bSTORE\s*(#|NO\b)|WWW\.|HTTPS?:|\.COM\b"#
     )
 
     private static let contactDetector: NSDataDetector? = {
@@ -386,15 +479,17 @@ struct RulesReceiptParser {
         return try? NSDataDetector(types: types)
     }()
 
-    /// The first name-like line at the top of the first page, before any amounts.
+    /// A name-like line at the top of the first page, before any amounts: the store name
+    /// is usually printed biggest, so a clearly taller line wins; otherwise the first one.
     private static func findMerchant(in lines: [AnalyzedLine]) -> String? {
         let header = lines.prefix(while: { line in line.amount == nil }).prefix(8)
-        for line in header where line.pageIndex == 0 {
-            if isMerchantCandidate(line.text) {
-                return cleanName(line.text)
-            }
+        let candidates = header.filter { line in line.pageIndex == 0 && isMerchantCandidate(line.text) }
+        guard let first = candidates.first else {
+            return nil
         }
-        return nil
+        let tallest = candidates.max { a, b in a.height < b.height } ?? first
+        let chosen = tallest.height >= first.height * 1.3 ? tallest : first
+        return cleanName(chosen.text)
     }
 
     private static func isMerchantCandidate(_ text: String) -> Bool {
@@ -438,7 +533,7 @@ struct RulesReceiptParser {
     private static func cleanName(_ text: String) -> String {
         let pieces = text.split(separator: " ", omittingEmptySubsequences: true)
         let joined = pieces.joined(separator: " ")
-        let separators = CharacterSet(charactersIn: " :$€£.-")
+        let separators = CharacterSet(charactersIn: " :$€£.-*#")
         return joined.trimmingCharacters(in: separators)
     }
 }
