@@ -56,7 +56,6 @@ final class ModelReceiptVerifierTests: XCTestCase {
         ("SUBTOTAL", .subtotal, ""),
         ("TAX", .tax, ""),
         ("TOTAL", .total, ""),
-        ("VISA", .payment, ""),
     ]
 
     // MARK: - Reading
@@ -117,7 +116,7 @@ final class ModelReceiptVerifierTests: XCTestCase {
             .build()
         let outcome = evaluate(scan, [
             ("USB-C CABLE", .item, "USB-C cable"), ("SCREEN PROTECTOR", .item, "Screen protector"),
-            ("SUBTOTAL", .subtotal, ""), ("HST 13%", .other, ""), ("TOTAL", .total, ""), ("VISA", .payment, ""),
+            ("SUBTOTAL", .subtotal, ""), ("HST 13%", .other, ""), ("TOTAL", .total, ""),
         ], store: "Best Buy, 220 Yonge St")
         XCTAssertEqual(outcome.receipt.parser, .appleIntelligence)
         XCTAssertEqual(outcome.receipt.merchant, "Best Buy")
@@ -139,7 +138,7 @@ final class ModelReceiptVerifierTests: XCTestCase {
         // The model gets the price per litre wrong; the keywords overrule it.
         let outcome = evaluate(scan, [
             ("PRICE/L", .item, "Price per litre"), ("FUEL TOTAL", .item, "Regular gas"),
-            ("HST INCLUDED", .tax, ""), ("TOTAL", .total, ""), ("VISA", .payment, ""),
+            ("HST INCLUDED", .tax, ""), ("TOTAL", .total, ""),
         ], store: "Shell", pricesIncludeTax: true, category: "fuel")
         let receipt = outcome.receipt
         XCTAssertEqual(receipt.parser, .appleIntelligence)
@@ -165,10 +164,13 @@ final class ModelReceiptVerifierTests: XCTestCase {
         let numbered = NumberedReceipt(scan: scan)
         XCTAssertFalse(numbered.entries.contains { entry in entry.text.contains("GROCERY") })
         XCTAssertFalse(numbered.entries.contains { entry in entry.text.contains("PRODUCE") })
+        // "YOU SAVED" describes the apples: it's indented under them, with no number to label.
+        XCTAssertFalse(numbered.entries.contains { entry in entry.text.contains("YOU SAVED") })
+        XCTAssertTrue(numbered.text.contains("APPLES 4.50\n    YOU SAVED 2.98\n"))
 
         let outcome = evaluate(scan, [
             ("PASTA", .item, "Pasta"), ("SAUCE", .item, "Sauce"), ("APPLES", .item, "Apples"),
-            ("YOU SAVED", .item, "You saved"), ("SUBTOTAL", .subtotal, ""), ("TOTAL", .total, ""),
+            ("SUBTOTAL", .subtotal, ""), ("TOTAL", .total, ""),
         ])
         XCTAssertEqual(itemList(outcome.receipt), itemList([("Pasta", "2.49"), ("Sauce", "3.99"), ("Apples", "4.50")]))
         XCTAssertEqual(outcome.receipt.notes, [ModelReceiptVerifier.usedNote])
@@ -240,19 +242,39 @@ final class ModelReceiptVerifierTests: XCTestCase {
         XCTAssertTrue(outcome.receipt.notes.contains { note in note.contains("already include 0.26 tax") })
     }
 
-    func testRulesAreKeptWhenTheyAddUpBetter() {
-        // The model calls the milk a discount, so its items can't match the subtotal.
+    func testAWrongLabelCantChangeAnAmount() {
+        // The model calls the milk a discount; amounts and signs come from the scan, so it stays 4.99.
         var picks = groceryPicks
         picks[1] = ("ORGANIC MILK", .discount, "Organic milk")
-        let scan = groceryScan()
+        let outcome = evaluate(groceryScan(), picks, store: "Trader Joe's")
+        XCTAssertTrue(outcome.usedModel)
+        XCTAssertEqual(outcome.receipt.lineItems.map { item in item.amount },
+                       [money("1.29"), money("4.99"), money("1.98"), money("-0.50")])
+        XCTAssertEqual(outcome.receipt.notes, [ModelReceiptVerifier.usedNote])
+    }
+
+    func testRulesAreKeptWhenTheyAddUpBetter() {
+        // "SALE PRICE" is the second item's price; the model calls it other, so its items can't
+        // reach the subtotal, while the rules count it because the subtotal needs it.
+        let scan = ReceiptLayoutBuilder()
+            .row("FRESH MART")
+            .row("CHIPS", "3.99")
+            .row("PRODUCE")
+            .row("SALE PRICE", "2.99")
+            .row("SUBTOTAL", "6.98")
+            .row("TOTAL", "6.98")
+            .build()
         let rules = RulesReceiptParser().parse(scan)
-        let outcome = evaluate(scan, picks, store: "Trader Joe's")
+        XCTAssertEqual(rules.lineItems.count, 2)
+        let outcome = evaluate(scan, [
+            ("CHIPS", .item, "Chips"), ("SALE PRICE", .other, ""), ("SUBTOTAL", .subtotal, ""), ("TOTAL", .total, ""),
+        ], store: "Fresh Mart")
         XCTAssertFalse(outcome.usedModel)
         XCTAssertEqual(outcome.receipt.parser, .rules)
         XCTAssertEqual(outcome.receipt.lineItems, rules.lineItems)
         XCTAssertEqual(outcome.receipt.notes.last, ModelReceiptVerifier.rulesAddUpBetterNote)
         // The store name still comes from the model.
-        XCTAssertEqual(outcome.receipt.merchant, "Trader Joe's")
+        XCTAssertEqual(outcome.receipt.merchant, "Fresh Mart")
     }
 
     func testNoItemsKeepsTheRules() {
@@ -261,7 +283,7 @@ final class ModelReceiptVerifierTests: XCTestCase {
             .row("TOTAL", "8.00")
             .row("VISA", "8.00")
             .build()
-        let outcome = evaluate(scan, [("TOTAL", .total, ""), ("VISA", .payment, "")])
+        let outcome = evaluate(scan, [("TOTAL", .total, "")])
         XCTAssertFalse(outcome.usedModel)
         XCTAssertEqual(outcome.receipt.notes.last, ModelReceiptVerifier.noItemsNote)
     }
@@ -321,8 +343,12 @@ final class ModelReceiptVerifierTests: XCTestCase {
 
     func testPromptNumbersTheLinesWithAmounts() {
         let numbered = NumberedReceipt(scan: groceryScan())
-        XCTAssertEqual(numbered.entries.count, 8)
-        XCTAssertTrue(numbered.text.hasPrefix("TRADER JOE'S\n"))
+        // The card payment below the total isn't numbered: nothing there can be an item.
+        XCTAssertEqual(numbered.entries.count, 7)
+        XCTAssertTrue(numbered.text.hasPrefix("--- store ---\nTRADER JOE'S\n"))
+        XCTAssertTrue(numbered.text.contains("--- items ---\n[1] ORG BNNA 4011 1.29\n"))
+        XCTAssertTrue(numbered.text.contains("--- totals ---\n[5] SUBTOTAL 7.76\n"))
+        XCTAssertTrue(numbered.text.contains("(no items here) ---\nVISA 8.38\n"))
         XCTAssertTrue(numbered.text.contains("[1] ORG BNNA 4011 1.29\n"))
         XCTAssertTrue(numbered.text.contains("\nAVOCADO\n[3] 2 @ 0.99 1.98\n"))
         XCTAssertTrue(numbered.text.contains("[7] TOTAL 8.38\n"))
@@ -334,29 +360,33 @@ final class ModelReceiptVerifierTests: XCTestCase {
         }
 
         let prompt = ReceiptPrompt.make(for: numbered)
-        XCTAssertTrue(prompt.hasPrefix("Label the 8 numbered lines"))
+        XCTAssertTrue(prompt.hasPrefix("Label the 7 numbered lines"))
         XCTAssertTrue(ReceiptPrompt.instructions.contains("taxTotal"))
         XCTAssertTrue(ReceiptPrompt.instructions.contains("groceries"))
         XCTAssertEqual(ReceiptPrompt.make(for: NumberedReceipt(scan: ScanResult(pageCount: 1, blocks: []))), "")
     }
 
     func testLongReceiptsAreCutToFit() {
-        let numbered = NumberedReceipt(scan: groceryScan(), maxCharacters: 80)
-        XCTAssertLessThanOrEqual(numbered.text.count, 80)
-        XCTAssertLessThan(numbered.entries.count, 8)
+        let numbered = NumberedReceipt(scan: groceryScan(), maxCharacters: 120)
+        XCTAssertLessThanOrEqual(numbered.text.count, 120)
+        XCTAssertGreaterThan(numbered.entries.count, 0)
+        XCTAssertLessThan(numbered.entries.count, 7)
         XCTAssertTrue(numbered.entries.allSatisfy { entry in numbered.text.contains("[\(entry.number)] ") })
     }
 
     func testTraceRecordsWhatTheModelSaid() {
         let scan = groceryScan()
         let numbered = NumberedReceipt(scan: scan)
-        let answer = reading(numbered, groceryPicks, store: "Trader Joe's", category: "groceries")
+        var answer = reading(numbered, groceryPicks, store: "Trader Joe's", category: "groceries")
+        // The model sometimes repeats its whole answer; each line is kept once.
+        answer.labels += answer.labels
         let outcome = ModelReceiptVerifier.evaluate(answer, numbered: numbered, rules: RulesReceiptParser().parse(scan))
         let trace = ModelReceiptVerifier.trace(of: answer, numbered: numbered, outcome: outcome, seconds: 2.5)
         XCTAssertEqual(trace.outcome, "used")
         XCTAssertEqual(trace.storeName, "Trader Joe's")
         XCTAssertEqual(trace.labels.first, "[1] item: ORG BNNA 4011 1.29 → Organic bananas")
-        XCTAssertEqual(trace.labels.count, 8)
+        XCTAssertEqual(trace.labels.count, 7)
+        XCTAssertEqual(outcome.receipt.lineItems.count, 4)
 
         // It's saved with the receipt and survives a round trip through JSON.
         var receipt = outcome.receipt

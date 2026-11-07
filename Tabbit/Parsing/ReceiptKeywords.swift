@@ -358,11 +358,17 @@ enum ReceiptKeywords {
         guard !letterWords.isEmpty else {
             return false
         }
+        let hasSavingsWord = letterWords.contains(where: { word in isSavingsWord(word) })
         var sawInfoWord = false
         for word in letterWords {
             if matchesAny(word, infoWords) || isSavingsWord(word) {
                 sawInfoWord = true
-            } else if !infoFillerWords.contains(word) {
+            } else if infoFillerWords.contains(word) {
+                continue
+            } else if hasSavingsWord && word.count <= 3 {
+                // OCR garbles the short words next to "SAVED": "VOU SAVED", "Y0U SAVED".
+                continue
+            } else {
                 return false
             }
         }

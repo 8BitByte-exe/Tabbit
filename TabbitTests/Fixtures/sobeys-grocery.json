@@ -1,0 +1,1180 @@
+{
+  "appVersion": "1.1.0",
+  "corrected": {
+    "date": {
+      "day": 30,
+      "month": 10,
+      "year": 2026
+    },
+    "lineItems": [
+      {
+        "amount": "4.5",
+        "confidence": 1,
+        "name": "chips lime block pepper"
+      },
+      {
+        "amount": "9",
+        "confidence": 1,
+        "name": "Item"
+      },
+      {
+        "amount": "4.75",
+        "confidence": 1,
+        "name": "chips roll-up fiery"
+      },
+      {
+        "amount": "9.5",
+        "confidence": 1,
+        "name": "Item"
+      },
+      {
+        "amount": "-1.04",
+        "confidence": 1,
+        "name": "voucher saved one dollar four"
+      },
+      {
+        "amount": "6.99",
+        "confidence": 1,
+        "name": "reese peanut butter cup mini"
+      },
+      {
+        "amount": "7.99",
+        "confidence": 1,
+        "name": "carving kit"
+      },
+      {
+        "amount": "0.99",
+        "confidence": 1,
+        "name": "pumpkin regular"
+      },
+      {
+        "amount": "0.99",
+        "confidence": 1,
+        "name": "pumpkin regular"
+      },
+      {
+        "amount": "-8.29",
+        "confidence": 1,
+        "name": "discounts and specials"
+      },
+      {
+        "amount": "29.36",
+        "confidence": 1,
+        "name": "purchase"
+      }
+    ],
+    "location": "100 Main 5t, Burlington, On L7P 0A0",
+    "merchant": "Sobeys",
+    "notes": [
+      "Read with Apple Intelligence on this iPhone. Every amount comes from the scan, but they don't all add up, so check them."
+    ],
+    "parser": "appleIntelligence",
+    "paymentMethod": "Visa",
+    "subtotal": "64.74",
+    "tax": "3.15",
+    "time": {
+      "hour": 17,
+      "minute": 25
+    },
+    "total": "29.36"
+  },
+  "exportedAt": "2026-11-07T00:43:45Z",
+  "format": "tabbit-scan",
+  "languageCorrection": false,
+  "parsed": {
+    "date": {
+      "day": 30,
+      "month": 10,
+      "year": 2026
+    },
+    "intelligence": {
+      "category": "food",
+      "date": "2026-10-30",
+      "labels": [
+        "[1] item: Chips Lime Blk Pep $4.50 HC → chips lime block pepper",
+        "[2] item: 1 @ 2/ $9.00 → one at two dollars",
+        "[3] discount: YOU SAVED $1.29 → you saved one point two nine",
+        "[4] item: Chips Rolld Fiery $4.75 HC → chips roll-up fiery",
+        "[5] item: 1 @ 2/ $9.50 → one at two dollars",
+        "[6] discount: VOU SAVED $1.04 → voucher saved one dollar four",
+        "[7] item: Reese PBC Mini $6.99 HC → reese peanut butter cup mini",
+        "[8] item: Carving Kit $7.99 HC → carving kit",
+        "[9] item: Pumpkin Regular 40/4 $0.99 C → pumpkin regular",
+        "[10] discount: YOU SAVED $2.98 → you saved two point nine eight",
+        "[11] item: Pumpkin Regular 40/4 $0.99 C → pumpkin regular",
+        "[12] discount: YOU SAVED $2.98 → you saved two point nine eight",
+        "[13] subtotal: SUBTOTAL $26.21 → subtotal",
+        "[14] tax: TOTAL TAX $3.15 → tax",
+        "[15] total: TOTAL $29.36 → total",
+        "[16] payment: Visa TENDER $29.36 → visa tendered",
+        "[17] payment: Cash CHANGE $0.00 → cash change",
+        "[18] discount: Discounts & Specials $8.29 → discounts and specials",
+        "[19] discount: Your Total Savings $8.29 → your total savings",
+        "[20] item: ** Purchase ** $ 29.36 → purchase"
+      ],
+      "outcome": "used",
+      "pricesIncludeTax": false,
+      "seconds": 21.57936704158783,
+      "storeName": "Sobeys"
+    },
+    "lineItems": [
+      {
+        "amount": "4.5",
+        "confidence": 1,
+        "name": "chips lime block pepper"
+      },
+      {
+        "amount": "9",
+        "confidence": 1,
+        "name": "Item"
+      },
+      {
+        "amount": "4.75",
+        "confidence": 1,
+        "name": "chips roll-up fiery"
+      },
+      {
+        "amount": "9.5",
+        "confidence": 1,
+        "name": "Item"
+      },
+      {
+        "amount": "-1.04",
+        "confidence": 1,
+        "name": "voucher saved one dollar four"
+      },
+      {
+        "amount": "6.99",
+        "confidence": 1,
+        "name": "reese peanut butter cup mini"
+      },
+      {
+        "amount": "7.99",
+        "confidence": 1,
+        "name": "carving kit"
+      },
+      {
+        "amount": "0.99",
+        "confidence": 1,
+        "name": "pumpkin regular"
+      },
+      {
+        "amount": "0.99",
+        "confidence": 1,
+        "name": "pumpkin regular"
+      },
+      {
+        "amount": "-8.29",
+        "confidence": 1,
+        "name": "discounts and specials"
+      },
+      {
+        "amount": "29.36",
+        "confidence": 1,
+        "name": "purchase"
+      }
+    ],
+    "location": "100 Main 5t, Burlington, On L7P 0A0",
+    "merchant": "Sobeys",
+    "notes": [
+      "Read with Apple Intelligence on this iPhone. Every amount comes from the scan, but they don't all add up, so check them."
+    ],
+    "parser": "appleIntelligence",
+    "paymentMethod": "Visa",
+    "subtotal": "26.21",
+    "tax": "3.15",
+    "time": {
+      "hour": 17,
+      "minute": 25
+    },
+    "total": "29.36"
+  },
+  "redacted": true,
+  "scan": {
+    "blocks": [
+      {
+        "confidence": 1,
+        "height": 0.0214,
+        "page": 0,
+        "text": "Jobeys",
+        "width": 0.3722,
+        "x": 0.3453,
+        "y": 0.9329
+      },
+      {
+        "confidence": 1,
+        "height": 0.0106,
+        "page": 0,
+        "text": "extra",
+        "width": 0.1375,
+        "x": 0.4583,
+        "y": 0.9209
+      },
+      {
+        "confidence": 1,
+        "height": 0.0148,
+        "page": 0,
+        "text": "Burlington Sobeys #742",
+        "width": 0.4907,
+        "x": 0.2147,
+        "y": 0.8965
+      },
+      {
+        "confidence": 1,
+        "height": 0.0099,
+        "page": 0,
+        "text": "100 Main 5t,",
+        "width": 0.306,
+        "x": 0.0699,
+        "y": 0.8885
+      },
+      {
+        "confidence": 1,
+        "height": 0.0099,
+        "page": 0,
+        "text": "Burlington, On L7P 0A0",
+        "width": 0.5,
+        "x": 0.375,
+        "y": 0.8923
+      },
+      {
+        "confidence": 1,
+        "height": 0.014,
+        "page": 0,
+        "text": "###-###-####",
+        "width": 0.2744,
+        "x": 0.3255,
+        "y": 0.8818
+      },
+      {
+        "confidence": 1,
+        "height": 0.0153,
+        "page": 0,
+        "text": "NST# ##### #### RT0001",
+        "width": 0.4876,
+        "x": 0.2144,
+        "y": 0.8727
+      },
+      {
+        "confidence": 1,
+        "height": 0.0132,
+        "page": 0,
+        "text": "Served by: Sam",
+        "width": 0.4655,
+        "x": 0.0446,
+        "y": 0.8549
+      },
+      {
+        "confidence": 1,
+        "height": 0.0156,
+        "page": 0,
+        "text": "******** DUPLICATE RECEIPT ********",
+        "width": 0.765,
+        "x": 0.1151,
+        "y": 0.8408
+      },
+      {
+        "confidence": 1,
+        "height": 0.0146,
+        "page": 0,
+        "text": "Burlington Sobeys #742",
+        "width": 0.4957,
+        "x": 0.2146,
+        "y": 0.8321
+      },
+      {
+        "confidence": 1,
+        "height": 0.0085,
+        "page": 0,
+        "text": "100 Main St,",
+        "width": 0.3092,
+        "x": 0.0661,
+        "y": 0.8238
+      },
+      {
+        "confidence": 1,
+        "height": 0.0139,
+        "page": 0,
+        "text": "Burlington, On L7P 0A0",
+        "width": 0.515,
+        "x": 0.3738,
+        "y": 0.824
+      },
+      {
+        "confidence": 1,
+        "height": 0.0066,
+        "page": 0,
+        "text": "###-### ####",
+        "width": 0.2708,
+        "x": 0.325,
+        "y": 0.8191
+      },
+      {
+        "confidence": 1,
+        "height": 0.0137,
+        "page": 0,
+        "text": "HST# ##### #### RT0001",
+        "width": 0.4946,
+        "x": 0.2111,
+        "y": 0.8066
+      },
+      {
+        "confidence": 1,
+        "height": 0.0142,
+        "page": 0,
+        "text": "Served by: Sam",
+        "width": 0.4742,
+        "x": 0.0356,
+        "y": 0.7875
+      },
+      {
+        "confidence": 1,
+        "height": 0.0092,
+        "page": 0,
+        "text": "GROCERY",
+        "width": 0.3099,
+        "x": 0.0366,
+        "y": 0.7637
+      },
+      {
+        "confidence": 1,
+        "height": 0.0099,
+        "page": 0,
+        "text": "Chips Lime Blk Pep",
+        "width": 0.4051,
+        "x": 0.0578,
+        "y": 0.7545
+      },
+      {
+        "confidence": 1,
+        "height": 0.0082,
+        "page": 0,
+        "text": "1 @",
+        "width": 0.075,
+        "x": 0.1667,
+        "y": 0.7465
+      },
+      {
+        "confidence": 1,
+        "height": 0.009,
+        "page": 0,
+        "text": "2/ $9.00",
+        "width": 0.2,
+        "x": 0.2667,
+        "y": 0.7457
+      },
+      {
+        "confidence": 1,
+        "height": 0.0091,
+        "page": 0,
+        "text": "YOU SAVED $1.29",
+        "width": 0.3625,
+        "x": 0.0792,
+        "y": 0.7367
+      },
+      {
+        "confidence": 1,
+        "height": 0.009,
+        "page": 0,
+        "text": "Chips Rolld Fiery",
+        "width": 0.3833,
+        "x": 0.0583,
+        "y": 0.7278
+      },
+      {
+        "confidence": 1,
+        "height": 0.0074,
+        "page": 0,
+        "text": "1 @",
+        "width": 0.075,
+        "x": 0.1667,
+        "y": 0.7205
+      },
+      {
+        "confidence": 1,
+        "height": 0.009,
+        "page": 0,
+        "text": "2/ $9.50",
+        "width": 0.225,
+        "x": 0.2375,
+        "y": 0.7196
+      },
+      {
+        "confidence": 1,
+        "height": 0.0091,
+        "page": 0,
+        "text": "VOU SAVED $1.04",
+        "width": 0.3625,
+        "x": 0.0833,
+        "y": 0.7106
+      },
+      {
+        "confidence": 1,
+        "height": 0.0084,
+        "page": 0,
+        "text": "Reese PBC Mini",
+        "width": 0.3167,
+        "x": 0.0542,
+        "y": 0.7032
+      },
+      {
+        "confidence": 1,
+        "height": 0.0082,
+        "page": 0,
+        "text": "Carving Kit",
+        "width": 0.25,
+        "x": 0.0583,
+        "y": 0.6951
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "PRODUCE",
+        "width": 0.3083,
+        "x": 0.0375,
+        "y": 0.6862
+      },
+      {
+        "confidence": 1,
+        "height": 0.0082,
+        "page": 0,
+        "text": "Pumpkin Regular 40/4",
+        "width": 0.45,
+        "x": 0.0583,
+        "y": 0.6781
+      },
+      {
+        "confidence": 1,
+        "height": 0.0098,
+        "page": 0,
+        "text": "YOU SAVED $2.98",
+        "width": 0.3635,
+        "x": 0.0828,
+        "y": 0.6689
+      },
+      {
+        "confidence": 1,
+        "height": 0.0097,
+        "page": 0,
+        "text": "Pumpkin Regular 40/4",
+        "width": 0.4467,
+        "x": 0.062,
+        "y": 0.6608
+      },
+      {
+        "confidence": 1,
+        "height": 0.0085,
+        "page": 0,
+        "text": "YOU SAVED",
+        "width": 0.2087,
+        "x": 0.0831,
+        "y": 0.6526
+      },
+      {
+        "confidence": 1,
+        "height": 0.0092,
+        "page": 0,
+        "text": "$2.98",
+        "width": 0.1212,
+        "x": 0.3248,
+        "y": 0.6519
+      },
+      {
+        "confidence": 1,
+        "height": 0.0084,
+        "page": 0,
+        "text": "SUBTOTAL",
+        "width": 0.1795,
+        "x": 0.329,
+        "y": 0.6364
+      },
+      {
+        "confidence": 1,
+        "height": 0.0084,
+        "page": 0,
+        "text": "TOTAL TAX",
+        "width": 0.2085,
+        "x": 0.3249,
+        "y": 0.6274
+      },
+      {
+        "confidence": 1,
+        "height": 0.0098,
+        "page": 0,
+        "text": "$4.50 HC",
+        "width": 0.1833,
+        "x": 0.7875,
+        "y": 0.7571
+      },
+      {
+        "confidence": 1,
+        "height": 0.0098,
+        "page": 0,
+        "text": "$4.75 HC",
+        "width": 0.1891,
+        "x": 0.7828,
+        "y": 0.7304
+      },
+      {
+        "confidence": 1,
+        "height": 0.0088,
+        "page": 0,
+        "text": "$6.99 HC",
+        "width": 0.1898,
+        "x": 0.7824,
+        "y": 0.7053
+      },
+      {
+        "confidence": 1,
+        "height": 0.0126,
+        "page": 0,
+        "text": "$7.99 HC",
+        "width": 0.194,
+        "x": 0.78,
+        "y": 0.6948
+      },
+      {
+        "confidence": 1,
+        "height": 0.0105,
+        "page": 0,
+        "text": "$0.99 C",
+        "width": 0.1654,
+        "x": 0.7821,
+        "y": 0.6784
+      },
+      {
+        "confidence": 1,
+        "height": 0.009,
+        "page": 0,
+        "text": "$0.99 C",
+        "width": 0.1644,
+        "x": 0.7826,
+        "y": 0.6619
+      },
+      {
+        "confidence": 1,
+        "height": 0.0073,
+        "page": 0,
+        "text": "TOTAL",
+        "width": 0.2208,
+        "x": 0.0875,
+        "y": 0.6186
+      },
+      {
+        "confidence": 1,
+        "height": 0.0073,
+        "page": 0,
+        "text": "Visa",
+        "width": 0.0958,
+        "x": 0.0833,
+        "y": 0.6096
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "Cash",
+        "width": 0.1042,
+        "x": 0.0792,
+        "y": 0.6007
+      },
+      {
+        "confidence": 1,
+        "height": 0.0078,
+        "page": 0,
+        "text": "TENDER",
+        "width": 0.1391,
+        "x": 0.4618,
+        "y": 0.6115
+      },
+      {
+        "confidence": 1,
+        "height": 0.0095,
+        "page": 0,
+        "text": "CHANGE",
+        "width": 0.1421,
+        "x": 0.4603,
+        "y": 0.6022
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "$26.21",
+        "width": 0.1375,
+        "x": 0.7625,
+        "y": 0.6365
+      },
+      {
+        "confidence": 1,
+        "height": 0.0086,
+        "page": 0,
+        "text": "$3.15",
+        "width": 0.1271,
+        "x": 0.7825,
+        "y": 0.6282
+      },
+      {
+        "confidence": 1,
+        "height": 0.0089,
+        "page": 0,
+        "text": "$29.36",
+        "width": 0.2513,
+        "x": 0.6662,
+        "y": 0.6182
+      },
+      {
+        "confidence": 1,
+        "height": 0.0082,
+        "page": 0,
+        "text": "$29.36",
+        "width": 0.1387,
+        "x": 0.7659,
+        "y": 0.6112
+      },
+      {
+        "confidence": 1,
+        "height": 0.009,
+        "page": 0,
+        "text": "$0.00",
+        "width": 0.1208,
+        "x": 0.7875,
+        "y": 0.6023
+      },
+      {
+        "confidence": 1,
+        "height": 0.0114,
+        "page": 0,
+        "text": "NUMBER OF ITEMS",
+        "width": 0.3403,
+        "x": 0.3277,
+        "y": 0.584
+      },
+      {
+        "confidence": 1,
+        "height": 0.0073,
+        "page": 0,
+        "text": "6",
+        "width": 0.0292,
+        "x": 0.8792,
+        "y": 0.5868
+      },
+      {
+        "confidence": 1,
+        "height": 0.0132,
+        "page": 0,
+        "text": "**************YOUR SAVINCS**************",
+        "width": 0.8933,
+        "x": 0.0407,
+        "y": 0.5665
+      },
+      {
+        "confidence": 1,
+        "height": 0.0112,
+        "page": 0,
+        "text": "Discounts & Specials",
+        "width": 0.4604,
+        "x": 0.0364,
+        "y": 0.5573
+      },
+      {
+        "confidence": 1,
+        "height": 0.0083,
+        "page": 0,
+        "text": "$8.29",
+        "width": 0.1211,
+        "x": 0.7957,
+        "y": 0.5615
+      },
+      {
+        "confidence": 1,
+        "height": 0.0097,
+        "page": 0,
+        "text": "Your Total Savings",
+        "width": 0.4135,
+        "x": 0.037,
+        "y": 0.5491
+      },
+      {
+        "confidence": 1,
+        "height": 0.0099,
+        "page": 0,
+        "text": "$8.29",
+        "width": 0.121,
+        "x": 0.7999,
+        "y": 0.5517
+      },
+      {
+        "confidence": 1,
+        "height": 0.0127,
+        "page": 0,
+        "text": "Percentage Savings",
+        "width": 0.4193,
+        "x": 0.0321,
+        "y": 0.5387
+      },
+      {
+        "confidence": 1,
+        "height": 0.0073,
+        "page": 0,
+        "text": "24%",
+        "width": 0.075,
+        "x": 0.8458,
+        "y": 0.5444
+      },
+      {
+        "confidence": 1,
+        "height": 0.0075,
+        "page": 0,
+        "text": "********************",
+        "width": 0.4512,
+        "x": 0.041,
+        "y": 0.5333
+      },
+      {
+        "confidence": 1,
+        "height": 0.0049,
+        "page": 0,
+        "text": "******",
+        "width": 0.1375,
+        "x": 0.8083,
+        "y": 0.5379
+      },
+      {
+        "confidence": 1,
+        "height": 0.0105,
+        "page": 0,
+        "text": "MERCHANT ########",
+        "width": 0.398,
+        "x": 0.0323,
+        "y": 0.5145
+      },
+      {
+        "confidence": 1,
+        "height": 0.0103,
+        "page": 0,
+        "text": "TERMINAL ID S###########",
+        "width": 0.5555,
+        "x": 0.0328,
+        "y": 0.5068
+      },
+      {
+        "confidence": 1,
+        "height": 0.0074,
+        "page": 0,
+        "text": "** Purchase",
+        "width": 0.2625,
+        "x": 0.0333,
+        "y": 0.4987
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "CARD VI",
+        "width": 0.1721,
+        "x": 0.0286,
+        "y": 0.4897
+      },
+      {
+        "confidence": 1,
+        "height": 0.0114,
+        "page": 0,
+        "text": "NO. ************####",
+        "width": 0.4688,
+        "x": 0.0324,
+        "y": 0.4796
+      },
+      {
+        "confidence": 1,
+        "height": 0.0113,
+        "page": 0,
+        "text": "DATE 10/30/2026",
+        "width": 0.3571,
+        "x": 0.0279,
+        "y": 0.4706
+      },
+      {
+        "confidence": 1,
+        "height": 0.011,
+        "page": 0,
+        "text": "AUTH # #####I",
+        "width": 0.3071,
+        "x": 0.0318,
+        "y": 0.4621
+      },
+      {
+        "confidence": 1,
+        "height": 0.0109,
+        "page": 0,
+        "text": "REF# #########",
+        "width": 0.3318,
+        "x": 0.032,
+        "y": 0.4533
+      },
+      {
+        "confidence": 1,
+        "height": 0.0142,
+        "page": 0,
+        "text": "APPL. Visa CREDIT",
+        "width": 0.3753,
+        "x": 0.0313,
+        "y": 0.4429
+      },
+      {
+        "confidence": 1,
+        "height": 0.0129,
+        "page": 0,
+        "text": "AID A#############",
+        "width": 0.4494,
+        "x": 0.0274,
+        "y": 0.436
+      },
+      {
+        "confidence": 1,
+        "height": 0.0074,
+        "page": 0,
+        "text": "RF (M)",
+        "width": 0.1167,
+        "x": 0.6042,
+        "y": 0.5182
+      },
+      {
+        "confidence": 1,
+        "height": 0.0068,
+        "page": 0,
+        "text": "** $",
+        "width": 0.0922,
+        "x": 0.6122,
+        "y": 0.5019
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "29.36",
+        "width": 0.1208,
+        "x": 0.7875,
+        "y": 0.502
+      },
+      {
+        "confidence": 1,
+        "height": 0.0102,
+        "page": 0,
+        "text": "RCPT #######",
+        "width": 0.2862,
+        "x": 0.6068,
+        "y": 0.4924
+      },
+      {
+        "confidence": 1,
+        "height": 0.0082,
+        "page": 0,
+        "text": "RESP 001",
+        "width": 0.1875,
+        "x": 0.6083,
+        "y": 0.484
+      },
+      {
+        "confidence": 1,
+        "height": 0.0091,
+        "page": 0,
+        "text": "TIME 17:25:46",
+        "width": 0.325,
+        "x": 0.6083,
+        "y": 0.4759
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "00",
+        "width": 0.0542,
+        "x": 0.0333,
+        "y": 0.4189
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "APPROVED",
+        "width": 0.1926,
+        "x": 0.2828,
+        "y": 0.4224
+      },
+      {
+        "confidence": 1,
+        "height": 0.0078,
+        "page": 0,
+        "text": "- THANK YOU",
+        "width": 0.2763,
+        "x": 0.4662,
+        "y": 0.4249
+      },
+      {
+        "confidence": 1,
+        "height": 0.0073,
+        "page": 0,
+        "text": "Term",
+        "width": 0.0958,
+        "x": 0.0375,
+        "y": 0.3855
+      },
+      {
+        "confidence": 1,
+        "height": 0.0073,
+        "page": 0,
+        "text": "Tran",
+        "width": 0.1,
+        "x": 0.1958,
+        "y": 0.3871
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "####",
+        "width": 0.1,
+        "x": 0.1917,
+        "y": 0.379
+      },
+      {
+        "confidence": 1,
+        "height": 0.0074,
+        "page": 0,
+        "text": "Store",
+        "width": 0.1209,
+        "x": 0.35,
+        "y": 0.3887
+      },
+      {
+        "confidence": 1,
+        "height": 0.0073,
+        "page": 0,
+        "text": "742",
+        "width": 0.075,
+        "x": 0.35,
+        "y": 0.3806
+      },
+      {
+        "confidence": 1,
+        "height": 0.0073,
+        "page": 0,
+        "text": "Oper",
+        "width": 0.0958,
+        "x": 0.5292,
+        "y": 0.3904
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "###",
+        "width": 0.075,
+        "x": 0.525,
+        "y": 0.3822
+      },
+      {
+        "confidence": 1,
+        "height": 0.0086,
+        "page": 0,
+        "text": "10/30/26",
+        "width": 0.188,
+        "x": 0.7748,
+        "y": 0.391
+      },
+      {
+        "confidence": 1,
+        "height": 0.009,
+        "page": 0,
+        "text": "17:25:51",
+        "width": 0.1875,
+        "x": 0.775,
+        "y": 0.3814
+      },
+      {
+        "confidence": 1,
+        "height": 0.0108,
+        "page": 0,
+        "text": "**NO RETURNS OR REFUNDS ON GIFT CARDS**",
+        "width": 0.8757,
+        "x": 0.0372,
+        "y": 0.3283
+      },
+      {
+        "confidence": 1,
+        "height": 0.0084,
+        "page": 0,
+        "text": "SHARE YOUR THOUGHTS",
+        "width": 0.4292,
+        "x": 0.3,
+        "y": 0.3031
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "FOR A CHANCE TO",
+        "width": 0.3417,
+        "x": 0.3417,
+        "y": 0.2942
+      },
+      {
+        "confidence": 1,
+        "height": 0.0159,
+        "page": 0,
+        "text": "WIN 1 OF 3 $500",
+        "width": 0.3546,
+        "x": 0.3373,
+        "y": 0.2769
+      },
+      {
+        "confidence": 1,
+        "height": 0.0098,
+        "page": 0,
+        "text": "SOBEYS GITT CARDS!",
+        "width": 0.4094,
+        "x": 0.3161,
+        "y": 0.2662
+      },
+      {
+        "confidence": 1,
+        "height": 0.0082,
+        "page": 0,
+        "text": "Hold on to this raceipt and",
+        "width": 0.6167,
+        "x": 0.2,
+        "y": 0.2478
+      },
+      {
+        "confidence": 1,
+        "height": 0.0082,
+        "page": 0,
+        "text": "complete our short online",
+        "width": 0.575,
+        "x": 0.2167,
+        "y": 0.2387
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "Customer Survey by visiting.",
+        "width": 0.6292,
+        "x": 0.1958,
+        "y": 0.2298
+      },
+      {
+        "confidence": 1,
+        "height": 0.0081,
+        "page": 0,
+        "text": "www.Sobeys.com/MySobeys",
+        "width": 0.525,
+        "x": 0.2417,
+        "y": 0.2209
+      },
+      {
+        "confidence": 1,
+        "height": 0.009,
+        "page": 0,
+        "text": "NO PORCHASE NECESSARY.",
+        "width": 0.5048,
+        "x": 0.258,
+        "y": 0.2029
+      },
+      {
+        "confidence": 1,
+        "height": 0.0109,
+        "page": 0,
+        "text": "Rules on Contest wibsite Open to",
+        "width": 0.7297,
+        "x": 0.1456,
+        "y": 0.1752
+      },
+      {
+        "confidence": 1,
+        "height": 0.0115,
+        "page": 0,
+        "text": "residents over the aue of majority in",
+        "width": 0.8458,
+        "x": 0.075,
+        "y": 0.1646
+      },
+      {
+        "confidence": 1,
+        "height": 0.0099,
+        "page": 0,
+        "text": "Optario orly.",
+        "width": 0.2982,
+        "x": 0.3448,
+        "y": 0.158
+      },
+      {
+        "confidence": 1,
+        "height": 0.0171,
+        "page": 0,
+        "text": "Contest ens 0cl 31 426 Cotrectly",
+        "width": 0.79,
+        "x": 0.095,
+        "y": 0.1441
+      },
+      {
+        "confidence": 1,
+        "height": 0.0171,
+        "page": 0,
+        "text": "arrwered akill testimy question required",
+        "width": 0.8979,
+        "x": 0.0537,
+        "y": 0.1342
+      },
+      {
+        "confidence": 1,
+        "height": 0.0169,
+        "page": 0,
+        "text": "Odds of winning deperdd on hember of",
+        "width": 0.7817,
+        "x": 0.095,
+        "y": 0.1261
+      },
+      {
+        "confidence": 1,
+        "height": 0.0128,
+        "page": 0,
+        "text": "entries recelved.",
+        "width": 0.3906,
+        "x": 0.0022,
+        "y": 0.1188
+      },
+      {
+        "confidence": 1,
+        "height": 0.0249,
+        "page": 0,
+        "text": "Book Fuu SHots and otter vaccinations",
+        "width": 0.8189,
+        "x": 0.0686,
+        "y": 0.0747
+      },
+      {
+        "confidence": 1,
+        "height": 0.0276,
+        "page": 0,
+        "text": "Tor you and vour famly with 360Health",
+        "width": 0.8483,
+        "x": 0.044,
+        "y": 0.0642
+      },
+      {
+        "confidence": 1,
+        "height": 0.0187,
+        "page": 0,
+        "text": "360heal thplarmacy.ca",
+        "width": 0.4395,
+        "x": 0.273,
+        "y": 0.0608
+      }
+    ],
+    "pageCount": 1
+  },
+  "version": 1
+}

@@ -72,7 +72,7 @@ struct RulesReceiptParser {
     }
 
     private func parse(_ scan: ScanResult, slopeChoice: Int) -> Receipt {
-        let lines = LineGrouper.lines(from: scan, slopeChoice: slopeChoice).map { line in AnalyzedLine(line) }
+        let lines = RulesReceiptParser.analyze(LineGrouper.lines(from: scan, slopeChoice: slopeChoice))
         var notes: [String] = []
 
         var subtotal = RulesReceiptParser.firstAmount(in: lines, role: .subtotal)
@@ -187,6 +187,16 @@ struct RulesReceiptParser {
 
     // MARK: - Lines
 
+    /// The receipt's lines with their roles, amounts and where the amounts sit.
+    static func analyze(_ textLines: [TextLine]) -> [AnalyzedLine] {
+        var lines = textLines.map { line in AnalyzedLine(line) }
+        let columns = ReceiptLayout.inPriceColumn(textLines, hasAmount: lines.map { line in line.amount != nil })
+        for index in lines.indices where index < columns.count {
+            lines[index].inPriceColumn = columns[index]
+        }
+        return lines
+    }
+
     struct AnalyzedLine {
         let text: String
         let pageIndex: Int
@@ -198,6 +208,8 @@ struct RulesReceiptParser {
         let confidence: Float
         /// Text height (normalized), to spot the big store name at the top.
         let height: CGFloat
+        /// The amount ends in the receipt's price column (see `ReceiptLayout`).
+        var inPriceColumn: Bool = true
 
         init(_ line: TextLine) {
             self.text = line.text
@@ -370,29 +382,61 @@ struct RulesReceiptParser {
 
     // MARK: - Items
 
+    /// How sure Tabbit is that a line is a purchase. Above 0 it's counted. The size is what it
+    /// costs to change that when the items don't add up (`ItemReconciler`); lines at 6 or more
+    /// either way never change on the rules' word alone.
+    enum Evidence {
+        /// A name and a price in the price column, among the items: something bought.
+        static let item = 6
+        /// Money off with a minus ("COUPON -0.50").
+        static let discount = 4
+        /// A minus amount with no name of its own ("-1.00" under an item).
+        static let unnamedDiscount = 3
+        /// A money-off word without a minus ("MEMBER DISCOUNT 1.00"): taken off unless the subtotal disagrees.
+        static let unsignedDiscount = 2
+        /// "REG PRICE 4.99", "SALE PRICE 2.99": usually information, sometimes the price paid.
+        static let priceInfo = -2
+        /// A department heading that picked up a stray price.
+        static let heading = -3
+        /// A quantity or price with no name ("1 @ 2/ $9.00") under an item that already has its price.
+        static let detail = -3
+        /// A deal description ("2 FOR 1", "MIX & MATCH").
+        static let deal = -4
+        /// "YOU SAVED 2.98": money not spent. Never a purchase.
+        static let savings = -9
+        /// The amount isn't in the price column, so it's not a line's price.
+        static let outsideColumn = -5
+        /// A named line right under an item whose amount is outside the column describes that item.
+        static let underItem = -3
+    }
+
     /// A line that might be an item.
     struct ItemCandidate {
         var item: ReceiptLineItem
+        /// See `Evidence`.
+        let evidence: Int
         /// Whether it's counted as a purchase.
         var included: Bool
-        /// Could reasonably go either way (regular-price lines, deal lines);
-        /// reconciliation may flip it.
-        let ambiguous: Bool
         /// The line's text, for notes.
         let label: String
+        /// Where the line is in the receipt's lines.
+        let lineIndex: Int
+        /// It sits under an item and describes it: a quantity, deal, regular price or savings.
+        let isDetail: Bool
         /// Another reading of the amount ("2 BANANAS 1.99" as 2 × 1.99); reconciliation may use it.
         var alternative: Decimal? = nil
         /// No line total was printed: the amount is quantity × unit price.
         var isComputed: Bool = false
     }
 
-    /// Item candidates: lines with a price above the first subtotal/tax/total line.
-    /// - A price line with no name of its own ("2 @ 0.99   1.98") takes the name
-    ///   from the line above, if that line has no price.
-    /// - Info lines ("REG PRICE 4.99", "YOU SAVE 1.00") are left out, unless the
-    ///   amount is negative, which makes them a discount.
-    /// - Payment and "TOTAL SAVINGS"-style lines are skipped.
-    private static func itemCandidates(in lines: [AnalyzedLine]) -> [ItemCandidate] {
+    /// Item candidates: lines with an amount between the top of the receipt and the first
+    /// subtotal/tax/total line, each with its evidence.
+    /// - A price line with no name of its own ("2 @ 0.99   1.98") takes the name from the line
+    ///   above, if that line has no price.
+    /// - Lines under an item that only describe it (quantities, deals, "YOU SAVED", amounts in
+    ///   the middle of the line) are details: left out unless the subtotal needs them.
+    /// - Payment, tip, rounding, unit-price and "TOTAL SAVINGS"-style lines are never items.
+    static func itemCandidates(in lines: [AnalyzedLine]) -> [ItemCandidate] {
         let summaryIndex = lines.firstIndex(where: { line in
             ReceiptLineRole.summaryRoles.contains(line.role) && line.amount != nil
         })
@@ -400,11 +444,18 @@ struct RulesReceiptParser {
 
         var candidates: [ItemCandidate] = []
         var lineAbove: AnalyzedLine?
-        for line in lines[0..<regionEnd] {
+        // True while the lines being read sit under an item that has its own price.
+        var underItem = false
+        for index in 0..<regionEnd {
+            let line = lines[index]
             guard let amount = line.amount else {
                 // A department heading ("PRODUCE") never lends its name to a price below it.
-                lineAbove = hasLetters(line.text) && !ReceiptKeywords.isHeading(line.text)
-                    && !ReceiptKeywords.isDeal(line.text) ? line : nil
+                if hasLetters(line.text) {
+                    lineAbove = !ReceiptKeywords.isHeading(line.text) && !ReceiptKeywords.isDeal(line.text) ? line : nil
+                    underItem = false
+                } else {
+                    lineAbove = nil
+                }
                 continue
             }
             let above = lineAbove
@@ -419,75 +470,103 @@ struct RulesReceiptParser {
                 // "BAG 0.00", "MEMBER PRICE 0.00": nothing to split.
                 continue
             }
+            let position = line.inPriceColumn ? 0 : Evidence.outsideColumn
+            let detailUnderItem = underItem
             if ReceiptKeywords.isHeading(amount.textBefore) {
                 // A heading that picked up a stray price. Left out unless the subtotal needs it.
                 candidates.append(makeCandidate(
                     name: itemName(from: amount.textBefore), amount: value, confidence: line.confidence,
-                    included: false, ambiguous: true, label: line.text))
+                    evidence: Evidence.heading + position, label: line.text, lineIndex: index, isDetail: false))
+                underItem = false
                 continue
             }
             if line.role == .discount {
                 // Money off. Printed without a minus it's still a deduction, but
                 // reconciliation may leave it out if the numbers disagree.
                 let name = itemName(from: amount.textBefore)
+                let evidence = (value < 0 ? Evidence.discount : Evidence.unsignedDiscount) + position
                 candidates.append(makeCandidate(
                     name: name.isEmpty ? "Discount" : name, amount: value < 0 ? value : -value,
-                    confidence: line.confidence, included: true, ambiguous: value > 0, label: line.text))
+                    confidence: line.confidence, evidence: evidence, label: line.text, lineIndex: index,
+                    isDetail: false))
                 continue
             }
             if ReceiptKeywords.isDetailOnly(amount.textBefore) {
                 if let above = above {
                     // "AVOCADO" then "2 @ 0.99   1.98": the price belongs to the name above.
+                    let evidence = Evidence.item + position
                     candidates.append(makeCandidate(
                         name: cleanName(above.text), amount: value,
                         confidence: min(above.confidence, line.confidence),
-                        included: true, ambiguous: false, label: line.text, detail: line.detail))
+                        evidence: evidence, label: line.text, lineIndex: index, isDetail: false,
+                        detail: line.detail))
+                    underItem = evidence > 0
                 } else if value < 0 {
                     candidates.append(makeCandidate(
                         name: "Discount", amount: value, confidence: line.confidence,
-                        included: true, ambiguous: false, label: line.text))
+                        evidence: Evidence.unnamedDiscount + position, label: line.text, lineIndex: index,
+                        isDetail: false))
                 } else {
                     // A deal or unit-price line under an item that already has a price,
                     // or a stray price. Left out unless the subtotal says otherwise.
                     candidates.append(makeCandidate(
                         name: itemName(from: line.text), amount: value, confidence: line.confidence,
-                        included: false, ambiguous: true, label: line.text))
+                        evidence: Evidence.detail + position, label: line.text, lineIndex: index,
+                        isDetail: detailUnderItem))
                 }
             } else if line.role == .info {
                 // "REG PRICE 4.99" could still be the price paid; "YOU SAVED 2.98" never is.
-                let isDiscount = value < 0
                 let isSavings = ReceiptKeywords.isSavings(line.text)
+                var evidence = Evidence.priceInfo
+                if value < 0 {
+                    evidence = Evidence.unnamedDiscount
+                } else if isSavings {
+                    evidence = Evidence.savings
+                } else if ReceiptKeywords.isDeal(line.text) {
+                    evidence = Evidence.deal
+                }
                 candidates.append(makeCandidate(
                     name: itemName(from: amount.textBefore), amount: value, confidence: line.confidence,
-                    included: isDiscount, ambiguous: !isDiscount && !isSavings, label: line.text))
+                    evidence: evidence + position, label: line.text, lineIndex: index,
+                    isDetail: value > 0 && (detailUnderItem || isSavings)))
             } else {
+                // A named line. Right under an item with its amount outside the price column, it
+                // describes that item ("VOU SAVED $1.04" that OCR garbled); otherwise it's an item.
+                let describesItemAbove = detailUnderItem && !line.inPriceColumn
+                let evidence = Evidence.item + position + (describesItemAbove ? Evidence.underItem : 0)
                 candidates.append(makeCandidate(
                     name: itemName(from: amount.textBefore), amount: value, confidence: line.confidence,
-                    included: true, ambiguous: false, label: line.text, detail: line.detail))
+                    evidence: evidence, label: line.text, lineIndex: index, isDetail: describesItemAbove,
+                    detail: line.detail))
+                if !describesItemAbove {
+                    underItem = evidence > 0
+                }
             }
         }
         return candidates
     }
 
     /// A candidate; for a purchase, `detail` adds its quantity and unit price ("2× BANANAS").
-    private static func makeCandidate(name: String, amount: Decimal, confidence: Float,
-                                      included: Bool, ambiguous: Bool, label: String,
+    private static func makeCandidate(name: String, amount: Decimal, confidence: Float, evidence: Int,
+                                      label: String, lineIndex: Int, isDetail: Bool,
                                       detail: LineAmount? = nil) -> ItemCandidate {
         let baseName = name.isEmpty ? "Item" : name
         guard let detail = detail, amount > 0 else {
             let item = ReceiptLineItem(name: baseName, amount: amount, confidence: confidence)
-            return ItemCandidate(item: item, included: included, ambiguous: ambiguous, label: label)
+            return ItemCandidate(item: item, evidence: evidence, included: evidence > 0, label: label,
+                                 lineIndex: lineIndex, isDetail: isDetail)
         }
         var item = ReceiptLineItem(name: LineAmountParser.name(baseName, quantity: detail.quantity),
                                    amount: amount, confidence: confidence)
         item.quantity = detail.quantity
         item.unitPrice = detail.unitPrice
-        return ItemCandidate(item: item, included: included, ambiguous: ambiguous, label: label,
+        return ItemCandidate(item: item, evidence: evidence, included: evidence > 0, label: label,
+                             lineIndex: lineIndex, isDetail: isDetail,
                              alternative: detail.alternative, isComputed: detail.isComputed)
     }
 
     /// The item with another amount (reconciliation chose the line's other reading).
-    private static func withAmount(_ item: ReceiptLineItem, _ amount: Decimal) -> ReceiptLineItem {
+    static func withAmount(_ item: ReceiptLineItem, _ amount: Decimal) -> ReceiptLineItem {
         var changed = ReceiptLineItem(name: item.name, amount: amount, confidence: item.confidence)
         changed.quantity = item.quantity
         if let quantity = item.quantity, quantity > 0 {
@@ -531,72 +610,29 @@ struct RulesReceiptParser {
         return (value: last.item.amount, label: last.label)
     }
 
-    /// If the counted items don't add up to `target`, tries counting or leaving out the
-    /// ambiguous lines, and reading quantity lines the other way ("2 BANANAS 1.99" as 2 × 1.99),
-    /// up to 12 changes. Applies them only if exactly one smallest set of changes makes the
-    /// items match, and returns a note describing it.
+    /// If the counted items don't add up to `target`, makes the cheapest set of changes that
+    /// does (`ItemReconciler`): counting or leaving out lines Tabbit isn't sure about, or reading
+    /// quantity lines the other way ("2 BANANAS 1.99" as 2 × 1.99). Applies it only if no other
+    /// equally cheap change works, and returns a note describing it.
     private static func reconcile(_ candidates: inout [ItemCandidate], target: Decimal,
                                   targetName: String) -> String? {
-        let currentSum = includedSum(candidates)
-        if ReceiptValidator.matches(currentSum, target) {
+        if ReceiptValidator.matches(includedSum(candidates), target) {
             return nil
         }
-        // A move counts or leaves out a line (swap false), or switches it to its other reading (swap true).
-        var moves: [(index: Int, swap: Bool)] = []
-        for index in candidates.indices {
-            if candidates[index].ambiguous {
-                moves.append((index: index, swap: false))
-            }
-            if candidates[index].alternative != nil {
-                moves.append((index: index, swap: true))
-            }
+        let choices = candidates.map { candidate in
+            ItemReconciler.Choice(amount: candidate.item.amount, alternative: candidate.alternative,
+                                  evidence: candidate.included ? max(candidate.evidence, 1) : min(candidate.evidence, 0))
         }
-        moves = Array(moves.prefix(12))
+        let moves = ItemReconciler.moves(for: choices)
         guard !moves.isEmpty else {
             return nil
         }
-
-        var bestMasks: [Int] = []
-        var bestFlipCount = Int.max
-        let combinationCount = 1 << moves.count
-        for mask in 1..<combinationCount {
-            var included = candidates.map { candidate in candidate.included }
-            var amounts = candidates.map { candidate in candidate.item.amount }
-            var swapped: Set<Int> = []
-            var flipCount = 0
-            for (bit, move) in moves.enumerated() where mask & (1 << bit) != 0 {
-                flipCount += 1
-                if move.swap {
-                    swapped.insert(move.index)
-                    amounts[move.index] = candidates[move.index].alternative ?? amounts[move.index]
-                } else {
-                    included[move.index].toggle()
-                }
-            }
-            // Switching a line's reading only matters if the line is counted.
-            if swapped.contains(where: { index in !included[index] }) {
-                continue
-            }
-            var sum = Decimal(0)
-            for index in candidates.indices where included[index] {
-                sum += amounts[index]
-            }
-            guard ReceiptValidator.matches(sum, target) else {
-                continue
-            }
-            if flipCount < bestFlipCount {
-                bestFlipCount = flipCount
-                bestMasks = [mask]
-            } else if flipCount == bestFlipCount {
-                bestMasks.append(mask)
-            }
-        }
-
-        guard bestMasks.count == 1, let mask = bestMasks.first else {
+        let fixes = ItemReconciler.reachableSums(choices, moves: moves)
+        guard let fix = ItemReconciler.lookup(target, in: fixes), fix.cost > 0 else {
             return nil
         }
         var changes: [String] = []
-        for (bit, move) in moves.enumerated() where mask & (1 << bit) != 0 {
+        for move in ItemReconciler.applied(fix, moves: moves) {
             let index = move.index
             if move.swap, let alternative = candidates[index].alternative {
                 let old = candidates[index].item.amount
@@ -604,11 +640,14 @@ struct RulesReceiptParser {
                 candidates[index].alternative = old
                 candidates[index].isComputed = false
                 changes.append("read \"\(candidates[index].label)\" as \(MoneyInput.editText(alternative))")
-            } else {
+            } else if !move.swap {
                 candidates[index].included.toggle()
                 let verb = candidates[index].included ? "counted" : "left out"
                 changes.append("\(verb) \"\(candidates[index].label)\"")
             }
+        }
+        guard !changes.isEmpty else {
+            return nil
         }
         return "To match the \(targetName), " + changes.joined(separator: ", ") + "."
     }

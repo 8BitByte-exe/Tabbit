@@ -34,7 +34,7 @@ struct GeneratedLineLabel {
     @Guide(description: "What the line is")
     var kind: GeneratedLineKind
 
-    @Guide(description: "For an item or discount, its name the way a person would say it. Empty for every other kind.")
+    @Guide(description: "For an item or discount, the product's name in Title Case, like Organic Bananas. Empty for every other kind.")
     var name: String
 }
 
@@ -44,13 +44,13 @@ struct GeneratedReceiptReading {
     @Guide(description: "The business's brand name only, like Best Buy, Shell or Trader Joe's. Never the address, city, branch or store number.")
     var storeName: String
 
-    @Guide(description: "One label for every numbered line, in order")
+    @Guide(description: "One label for each numbered line, in order, each number only once")
     var lines: [GeneratedLineLabel]
 
     @Guide(description: "True if the receipt says its prices already include the tax, like VAT included or HST included")
     var pricesIncludeTax: Bool
 
-    @Guide(description: "What the purchase was for: one category from the list in the instructions")
+    @Guide(description: "The kind of business: one category word from the list in the instructions, like groceries for a supermarket")
     var category: String
 
     @Guide(description: "The purchase date as YYYY-MM-DD, or an empty string if no date is printed")

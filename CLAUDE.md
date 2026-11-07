@@ -79,9 +79,12 @@ Tabbit/
     AppleIntelligenceReader.swift  FoundationModels only (#if canImport, iOS 26): @Generable line labels
                                (no optional fields), session, error checks
     ModelReceiptVerifier.swift ModelReceiptReading (plain Swift labels), ScanEvidence, assemble():
-                               amounts from the scan, totals chosen by arithmetic, disputed lines
-                               reconciled, compared with the rules (fully unit-tested)
-    ReceiptPrompt.swift        NumberedReceipt ("[4] HST 13% 6.50": numbered amount lines) + instructions
+                               amounts from the scan, the model's labels added to the rules' evidence
+                               (modelEvidence), ItemReconciler for the items, totals chosen by
+                               arithmetic, compared with the rules (fully unit-tested)
+    ReceiptPrompt.swift        NumberedReceipt: the receipt in parts (--- store/items/totals/payment ---),
+                               items and totals numbered ("[4] HST 13% 6.50"), detail lines indented
+                               without a number, nothing below the totals numbered; instructions
   Storage/
     TabbitStore.swift        @MainActor store: Application Support/Receipts/{profile.json, groups.json,
                              <id>/receipt.json, page-N.jpg, thumbnail.jpg}; no iCloud Backup; complete
@@ -95,6 +98,10 @@ Tabbit/
   Parsing/
     LineGrouper.swift          rebuilds receipt lines from Vision blocks: tilt guesses, grouping,
                                lone prices joined to the nearest name
+    ReceiptLayout.swift        the price column: which amounts end at the right where prices are
+                               printed, and which sit mid-line (detail lines); no column, no judgment
+    ItemReconciler.swift       evidence-weighted choice of purchases: lines above 0 are counted; the
+                               cheapest unique set of changes that makes them add up wins
     ReceiptKeywords.swift      line roles with OCR-tolerant keywords (SJETOTAL → SUBTOTAL, TIP/GRATUITY),
                                included tax, discounts, rounding; German/Spanish/French/Italian/Dutch words
     AmountParser.swift         money amounts at the end of a line
@@ -103,9 +110,11 @@ Tabbit/
     ReceiptDetailsParser.swift time of purchase, store address (street + city/postal lines), payment method
                                (card brand, debit, cash; never digits), printed tax rate
     ReceiptDateParser.swift    purchase date (explicit patterns, not NSDataDetector)
-    RulesReceiptParser.swift   the rules-based parser (fallback tier): items, sale/deal and weight lines,
-                               codes/flags in names, discounts, tip (not tip guides), VAT-included
-                               prices, rounding, inferred subtotal, reconciliation, tilt choice, merchant
+    RulesReceiptParser.swift   the rules-based parser (fallback tier): analyze() (roles, amounts, price
+                               column), itemCandidates() with Evidence (layout + keywords) and detail lines,
+                               sale/deal and weight lines, codes/flags in names, discounts, tip (not tip
+                               guides), VAT-included prices, rounding, inferred subtotal, reconciliation,
+                               tilt choice, merchant
     ReceiptValidator.swift     arithmetic checks: items = subtotal, subtotal + tax + tip = total
     RegexHelpers.swift         NSRegularExpression helpers (`Patterns.make`)
   Views/
@@ -200,6 +209,9 @@ The owner cares a lot about design. Every new screen must use the design system.
 - Bounding boxes are stored the way Vision returns them: normalized 0–1, with the origin at the **bottom-left** of the page.
 - Put parsing logic in plain Swift types that unit tests can cover. CI can only test logic; UI is tested on the phone.
 - Lessons from real receipts:
+  - Read the layout before the words. Prices sit in a column at the right; an amount in the middle of a line ("1 @ 2/ $9.00", "YOU SAVED $1.29") describes the item above it and isn't a price paid. `ReceiptLayout` finds the column, and only judges by it when most amounts line up.
+  - Every receipt has parts: store, items, totals, then payment and other details. Only the items part holds purchases: "** Purchase ** $29.36" on the card slip and "Discounts & Specials" summaries below the total never are.
+  - Don't add a rule per mistake. Give each line evidence (`RulesReceiptParser.Evidence`, plus Apple Intelligence's label) and let `ItemReconciler` pick what adds up. New layouts then get handled by the combination, and the arithmetic settles conflicts.
   - Prices often sit up to a line higher or lower than their names (tilt, curl), so never match by height alone.
   - OCR garbles keywords, so match them fuzzily.
   - Sale and regular-price lines aren't purchases.
@@ -210,7 +222,7 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Tip guides ("18% $7.20") printed under the total are not tips.
   - Wordings vary: "SUB", "Total before tax" and "Subtotal excl. tax" are the subtotal; "FINAL", "Total after tax", "Sub with tax" are the total; "TOTAL TAX" is the tax; "H.S.T." is HST; TPS/TVQ/TVH are Quebec's GST/QST/HST.
   - Gas receipts: "PRICE/L", "LITRES" and per-unit prices are never purchases, and "FUEL TOTAL" is the fuel bought.
-  - Department headings ("PRODUCE", "21-GROCERY") are not items and never take a stray price; "YOU SAVED" is never a purchase.
+  - Department headings ("PRODUCE", "21-GROCERY") are not items and never take a stray price, and they mean a supermarket (Groceries), whatever Apple Intelligence guesses. "YOU SAVED" (OCR: "VOU SAVED") is never a purchase.
   - Store names come with store numbers and branches ("SHELL #1234", "Walmart, Toronto"); strip them.
   - Item names carry barcodes, PLU codes (3000–4999) and tax flags; strip them, but keep numbers that are part of the name ("1000 ISLAND").
   - Every receipt has the same parts in different words and orders: merchant, address, date and time, items (name, quantity, price), subtotal, tax (amount and often a rate), tip, total and payment. Fill in each one, and mark the ones a scan didn't find (`ScanAutofill`), so the person can add them.
@@ -225,7 +237,7 @@ The owner cares a lot about design. Every new screen must use the design system.
 
 ## Test fixtures from real receipts
 
-The app's **Export** button shares a JSON file (`ScanExport`): the raw OCR blocks with positions plus what the parser produced. No images. Drop such a file into `TabbitTests/Fixtures/` and load it with `Fixtures.scan(named:)`. Then assert what the parser should return. The repo is public, so real receipts should be redacted (card digits, addresses) before they're committed.
+The app's **Export** button shares a JSON file (`ScanExport`): the raw OCR blocks with positions plus what the parser produced. No images. Drop such a file into `TabbitTests/Fixtures/` and load it with `Fixtures.scan(named:)`. Then assert what the parser should return, with the rules and with the model's labels from the export's `intelligence` trace (see `RealReceiptTests`). The repo is public, so real receipts should be redacted (card digits, addresses, staff names, receipt numbers) before they're committed.
 
 ## Roadmap
 
@@ -240,10 +252,11 @@ The design is tiered and entirely on-device. Each phone gets the best tier it su
 1. **Done:** scan + raw OCR text.
 2. **Done:** Export button, rules parser (tier 3), arithmetic checks, unit tests in CI, "Parsed with" label.
    - **Done:** accuracy pass after the first real-world test (v0.3): tilt handling, fuzzy keywords, sale/deal lines, reconciliation, OCR settings, uncertain-name marks, redacted exports.
-   - Next: real exported receipts as fixtures.
+   - **Done:** real exported receipts as fixtures (`sobeys-grocery.json`, `RealReceiptTests`).
 3. **In progress:** iOS 26 tiers.
-   - **Done (v1.1):** Foundation Models (tier 1). The prompt numbers every rebuilt line that ends in an amount; the model labels each number (item, discount, subtotal, tax, taxTotal, tip, total, payment, savings, unitPrice, other), names the items and gives the brand name, category and date. It never writes an amount: `ModelReceiptVerifier` takes them from the scan, tries the subtotal/tax/tip/total combinations (model labels first, keywords as a second opinion) and keeps the one that adds up, flips lines where the model and the keywords disagree when exactly one fix makes the items match, and uses the model's receipt unless the rules' adds up better. Item names must plausibly spell out the printed text; store names must be on the scan and lose store numbers and branches. 45 s timeout; a too-long receipt is retried shorter. Settings has a status row and an on/off toggle. `ReceiptParserKind.appleIntelligence` marks receipts it read, and `Receipt.intelligence` (an `IntelligenceTrace`) keeps the model's raw labels for Export Scan Data.
+   - **Done (v1.1):** Foundation Models (tier 1). The prompt shows the receipt in parts and numbers the item and total lines (detail lines under an item are indented without a number); the model labels each number (item, discount, subtotal, tax, taxTotal, tip, total, payment, savings, unitPrice, other), names the items and gives the brand name, category and date. It never writes an amount: `ModelReceiptVerifier` takes them from the scan, adds the model's labels to the layout and keyword evidence of each possible purchase, lets `ItemReconciler` pick the items that add up, tries the subtotal/tax/tip/total combinations (model labels first, keywords as a second opinion) and keeps the one that adds up, and uses the model's receipt unless the rules' adds up better. Item names must plausibly spell out the printed text; store names must be on the scan and lose store numbers and branches. 45 s timeout; a too-long receipt is retried shorter. Settings has a status row and an on/off toggle. `ReceiptParserKind.appleIntelligence` marks receipts it read, and `Receipt.intelligence` (an `IntelligenceTrace`) keeps the model's raw labels for Export Scan Data.
    - Lesson from the first 1.1 build: with optional `@Generable` fields the model left the total empty on every receipt, so every reading was rejected. Keep every generated field required (empty string or 0 for "none"), and never let the model copy numbers.
+   - Lesson from the second 1.1 build (a Sobeys receipt): labelling every amount line on its own, the model called "1 @ 2/ $9.00" detail lines and the card slip's "Purchase $29.36" items, "you saved" lines discounts, and the supermarket "food". So the model now sees the receipt in parts with detail lines indented and unnumbered, its labels are evidence added to the layout's rather than the answer, the category list explains groceries vs dining, and department headings outrank its category. Lower-case names get capitals.
    - Next: Vision's document reader (`RecognizeDocumentsRequest`, tier 2) for better rows and amounts.
    - The model can only be tested on the phone; CI runners can't run Apple Intelligence, so tests feed `ModelReceiptReading`s (line labels, right and wrong) to the verifier. When a real receipt reads badly, ask the owner for its Export Scan Data: the `intelligence` trace shows each label the model gave.
 4. **Done:** saving with editing (v0.4): design system, saved receipts, editable receipt screen, on-device storage with photos.
