@@ -11,6 +11,12 @@ enum Changelog {
     }
 
     static let entries: [Entry] = [
+        Entry(version: "1.2", title: "Map", highlights: [
+            (symbol: "map.fill", text: "The new Map tab pins every receipt's store, from the address printed on the receipt. Tap a pin to see what you bought there."),
+            (symbol: "airplane", text: "Each group has its own map too, so a trip shows everywhere you went."),
+            (symbol: "mappin.slash", text: "Receipts without an address, or with one Apple Maps couldn't find, are listed so you can type the address in."),
+            (symbol: "lock.fill", text: "The map is off until you turn it on. Then Apple Maps gets each store's name and address once, and nothing else leaves your iPhone."),
+        ]),
         Entry(version: "1.1", title: "Apple Intelligence", highlights: [
             (symbol: "sparkles", text: "On iOS 26, Apple Intelligence reads your receipts: which lines are items, tax and the total, readable names, the store and the category. It runs entirely on your iPhone."),
             (symbol: "checkmark.shield.fill", text: "Every amount comes straight from the scan, and Tabbit picks the items, subtotal, tax and total that add up."),

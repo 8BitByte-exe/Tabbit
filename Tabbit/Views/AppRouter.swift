@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// The three tabs.
+/// The tabs.
 enum AppTab: String, CaseIterable, Identifiable {
     case groups
     case receipts
+    case map
     case profile
 
     var id: String { rawValue }
@@ -12,6 +13,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         switch self {
         case .groups: return "Groups"
         case .receipts: return "My Receipts"
+        case .map: return "Map"
         case .profile: return "Profile"
         }
     }
@@ -20,6 +22,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         switch self {
         case .groups: return "person.3.fill"
         case .receipts: return "doc.text.fill"
+        case .map: return "map.fill"
         case .profile: return "person.crop.circle.fill"
         }
     }
@@ -31,6 +34,8 @@ enum Route: Hashable {
     /// A receipt, with the other receipts of the same group (or My Receipts) one swipe away.
     case receipt(UUID, inGroup: UUID?)
     case settleUp(UUID)
+    /// A group's receipts on a map.
+    case map(UUID)
     case settings
 }
 
@@ -40,6 +45,7 @@ final class AppRouter: ObservableObject {
     @Published var tab: AppTab = .groups
     @Published var groupsPath: [Route] = []
     @Published var receiptsPath: [Route] = []
+    @Published var mapPath: [Route] = []
     @Published var profilePath: [Route] = []
 
     /// The tab bar only shows on the tabs' first screens.
@@ -47,6 +53,7 @@ final class AppRouter: ObservableObject {
         switch tab {
         case .groups: return groupsPath.isEmpty
         case .receipts: return receiptsPath.isEmpty
+        case .map: return mapPath.isEmpty
         case .profile: return profilePath.isEmpty
         }
     }
@@ -55,6 +62,7 @@ final class AppRouter: ObservableObject {
         switch tab {
         case .groups: groupsPath.append(route)
         case .receipts: receiptsPath.append(route)
+        case .map: mapPath.append(route)
         case .profile: profilePath.append(route)
         }
     }
@@ -65,6 +73,7 @@ final class AppRouter: ObservableObject {
             switch tab {
             case .groups: groupsPath = []
             case .receipts: receiptsPath = []
+            case .map: mapPath = []
             case .profile: profilePath = []
             }
         } else {

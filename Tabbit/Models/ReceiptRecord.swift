@@ -102,13 +102,16 @@ struct ReceiptRecord: Identifiable, Equatable {
     var scan: ScanResult?
     var parsed: Receipt?
     var languageCorrection: Bool?
+    /// Where the store is on the map, once Apple Maps has looked up its address (map turned on).
+    var place: ReceiptPlace?
 
     init(id: UUID = UUID(), groupID: UUID? = nil, createdAt: Date = Date(), updatedAt: Date = Date(),
          merchant: String = "", location: String = "", date: Date = Calendar.current.startOfDay(for: Date()),
          time: ClockTime? = nil, paymentMethod: String = "", category: SpendCategory = .other, paidBy: UUID = Person.meID, items: [SplitItem] = [],
          tax: Decimal? = nil, tip: TipValue? = nil, total: Decimal? = nil, includeFees: Bool = true,
          source: ReceiptSource = .manual, autofilled: Set<ReceiptField> = [], unreadable: Set<ReceiptField> = [],
-         pageImageCount: Int = 0, scan: ScanResult? = nil, parsed: Receipt? = nil, languageCorrection: Bool? = nil) {
+         pageImageCount: Int = 0, scan: ScanResult? = nil, parsed: Receipt? = nil, languageCorrection: Bool? = nil,
+         place: ReceiptPlace? = nil) {
         self.id = id
         self.groupID = groupID
         self.createdAt = createdAt
@@ -132,6 +135,7 @@ struct ReceiptRecord: Identifiable, Equatable {
         self.scan = scan
         self.parsed = parsed
         self.languageCorrection = languageCorrection
+        self.place = place
     }
 
     // MARK: - Amounts
@@ -294,7 +298,7 @@ extension ReceiptRecord: Codable {
         case schema, id, groupID, createdAt, updatedAt, merchant, location, date, time, paymentMethod, category
         case paidBy, items
         case tax, tip, total, includeFees, source, autofilled, unreadable, pageImageCount
-        case scan, parsed, languageCorrection
+        case scan, parsed, languageCorrection, place
     }
 
     init(from decoder: Decoder) throws {
@@ -322,7 +326,8 @@ extension ReceiptRecord: Codable {
             pageImageCount: try container.decodeIfPresent(Int.self, forKey: .pageImageCount) ?? 0,
             scan: try container.decodeIfPresent(ScanResult.self, forKey: .scan),
             parsed: try container.decodeIfPresent(Receipt.self, forKey: .parsed),
-            languageCorrection: try container.decodeIfPresent(Bool.self, forKey: .languageCorrection)
+            languageCorrection: try container.decodeIfPresent(Bool.self, forKey: .languageCorrection),
+            place: try? container.decodeIfPresent(ReceiptPlace.self, forKey: .place)
         )
     }
 
@@ -352,5 +357,6 @@ extension ReceiptRecord: Codable {
         try container.encodeIfPresent(scan, forKey: .scan)
         try container.encodeIfPresent(parsed, forKey: .parsed)
         try container.encodeIfPresent(languageCorrection, forKey: .languageCorrection)
+        try container.encodeIfPresent(place, forKey: .place)
     }
 }
