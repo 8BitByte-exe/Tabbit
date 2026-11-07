@@ -97,9 +97,11 @@ final class PlaceFinder: ObservableObject {
     private var task: Task<Void, Never>?
     private var runID = 0
 
-    init(searcher: PlaceSearching = AppleMapsSearcher(), pauseNanoseconds: UInt64 = 400_000_000,
+    /// `searcher` defaults to Apple Maps (made here, not as a default argument, because the
+    /// searcher is main-actor isolated and default arguments are evaluated outside it).
+    init(searcher: PlaceSearching? = nil, pauseNanoseconds: UInt64 = 400_000_000,
          throttleWaitNanoseconds: UInt64 = 60_000_000_000) {
-        self.searcher = searcher
+        self.searcher = searcher ?? AppleMapsSearcher()
         self.pause = pauseNanoseconds
         self.throttleWait = throttleWaitNanoseconds
     }

@@ -10,11 +10,15 @@ final class ReceiptMapTests: XCTestCase {
             .appendingPathComponent("ReceiptMapTests-\(UUID().uuidString)", isDirectory: true)
     }
 
+    /// A whole second, so saved files compare equal.
+    private let lookedUp = Date(timeIntervalSinceReferenceDate: 800_000_000)
+
     private func found(_ receipt: ReceiptRecord, _ latitude: Double, _ longitude: Double) -> ReceiptRecord {
         var copy = receipt
         let query = PlaceQuery.make(for: copy)
         copy.place = ReceiptPlace(query: query?.key ?? "",
-                                  found: FoundPlace(latitude: latitude, longitude: longitude, address: ""))
+                                  found: FoundPlace(latitude: latitude, longitude: longitude, address: ""),
+                                  at: lookedUp)
         return copy
     }
 
@@ -112,7 +116,8 @@ final class ReceiptMapTests: XCTestCase {
         let store = TabbitStore(folder: temporaryFolder())
         let receipt = try store.add(ReceiptRecord(merchant: "Sobeys", location: "100 Main St, Burlington"))
         let place = ReceiptPlace(query: PlaceQuery.make(for: receipt)?.key ?? "",
-                                 found: FoundPlace(latitude: 43.33, longitude: -79.79, address: ""))
+                                 found: FoundPlace(latitude: 43.33, longitude: -79.79, address: ""),
+                                 at: lookedUp)
         store.setPlace(place, for: receipt.id)
 
         // The editor opened before the place was found, so its copy has none.
@@ -168,7 +173,8 @@ final class ReceiptMapTests: XCTestCase {
         let finder = PlaceFinder(searcher: searcher, pauseNanoseconds: 0, throttleWaitNanoseconds: 0)
 
         await finder.findWaiting(in: store)
-        XCTAssertEqual(searcher.queries.sorted(), ["Kiosk, Kiosk 3, Old Town", "Sobeys, 100 Main St, Burlington"])
+        // "Kiosk" is already in the kiosk's address, so it's sent once.
+        XCTAssertEqual(searcher.queries.sorted(), ["Kiosk 3, Old Town", "Sobeys, 100 Main St, Burlington"])
         XCTAssertEqual(store.receipt(sobeys.id)?.place?.latitude, 43.33)
         XCTAssertEqual(ReceiptMap.status(of: try XCTUnwrap(store.receipt(kiosk.id))), .notFound)
         XCTAssertNil(store.receipt(power.id)?.place)
