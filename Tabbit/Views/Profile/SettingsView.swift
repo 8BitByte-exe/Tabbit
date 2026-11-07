@@ -6,6 +6,8 @@ struct SettingsView: View {
 
     @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
     @AppStorage(OCRSettings.languageCorrectionKey) private var languageCorrection: Bool = false
+    @AppStorage(ReceiptIntelligence.enabledKey) private var usesIntelligence: Bool = true
+    @State private var intelligenceStatus: IntelligenceStatus = ReceiptIntelligence.status
     @State private var usage: StorageUsage?
     @State private var shareFile: ShareFile?
     @State private var showsWhatsNew = false
@@ -32,6 +34,10 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                section("Apple Intelligence") {
+                    intelligenceSection
+                }
+
                 section("Your data") {
                     storageMeter
                     Button(action: exportCSV) {
@@ -54,7 +60,8 @@ struct SettingsView: View {
                     })
                     .buttonStyle(NeumorphicCardButtonStyle(padding: Theme.Spacing.m))
                     VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                        Label("Scanning, reading and splitting happen on this iPhone.", systemImage: "iphone")
+                        Label("Scanning, reading and splitting happen on this iPhone, including Apple Intelligence.",
+                              systemImage: "iphone")
                         Label("Receipts and photos are stored only here, encrypted while the phone is locked, and left out of iCloud Backup.",
                               systemImage: "lock.fill")
                         Label("Nothing leaves your phone unless you share or export it.",
@@ -77,6 +84,7 @@ struct SettingsView: View {
         .clayNavigation("Settings")
         .onAppear {
             usage = store.storageUsage()
+            intelligenceStatus = ReceiptIntelligence.status
         }
         .sheet(item: $shareFile) { file in
             ActivityView(items: [file.url])
@@ -85,6 +93,36 @@ struct SettingsView: View {
         .sheet(isPresented: $showsWhatsNew) {
             WhatsNewView()
         }
+    }
+
+    @ViewBuilder
+    private var intelligenceSection: some View {
+        HStack(spacing: Theme.Spacing.m) {
+            IconBadge(symbol: "sparkles", tone: intelligenceStatus == .available ? .positive : .neutral, size: 30)
+            Text("Status")
+                .font(Theme.Fonts.body)
+                .foregroundStyle(Theme.Colors.text)
+            Spacer()
+            StatusPill(title: intelligenceStatus.title,
+                       symbol: intelligenceStatus == .available ? "checkmark" : "info.circle",
+                       tone: intelligenceStatus == .available ? .positive : .neutral)
+        }
+        .accessibilityElement(children: .combine)
+        if intelligenceStatus == .available {
+            Toggle(isOn: $usesIntelligence) {
+                Text("Read receipts with Apple Intelligence")
+            }
+            .toggleStyle(ClayToggleStyle())
+        }
+        Text(intelligenceStatus.explanation)
+            .font(Theme.Fonts.caption)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+        Label("Every amount it reads is checked against the scan. If anything doesn't add up, Tabbit uses its built-in rules. Nothing leaves your iPhone.",
+              systemImage: "checkmark.shield.fill")
+            .font(Theme.Fonts.caption)
+            .foregroundStyle(Theme.Colors.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

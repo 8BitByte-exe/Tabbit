@@ -39,6 +39,16 @@ struct ReceiptLayoutBuilder {
         return copy
     }
 
+    /// A row Vision returned as one block that stops short of the price column, like an
+    /// indented detail line ("1 @ 2/ $9.00", "YOU SAVED $1.29") with its amount mid-line.
+    func inlineRow(_ text: String, x: CGFloat = 0.15, width: CGFloat = 0.3) -> ReceiptLayoutBuilder {
+        var copy = self
+        let minY = copy.nextRowTop - ReceiptLayoutBuilder.rowHeight
+        copy.blocks.append(copy.makeBlock(text, x: x, y: minY, width: width, confidence: 1, alternatives: []))
+        copy.nextRowTop = minY - ReceiptLayoutBuilder.rowSpacing
+        return copy
+    }
+
     /// A price on its own row at the right, under the previous row.
     func priceRow(_ price: String) -> ReceiptLayoutBuilder {
         var copy = self

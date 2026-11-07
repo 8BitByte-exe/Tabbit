@@ -5,8 +5,8 @@ import UIKit
 /// Screenshot mode for CI (Debug builds only; the Release IPA doesn't contain it).
 ///
 /// Launch arguments: `-TabbitDemo -TabbitScreen <screen>`, where screen is one of
-/// groups, group, swipe, receipt, settle, edit, category, add, mine, sort, profile, settings,
-/// whatsnew, processing, dialog or empty. Sample data goes into a throwaway folder, never the real store.
+/// groups, group, swipe, receipt, settle, edit, category, add, mine, sort, profile, profileedit,
+/// settings, whatsnew, processing, dialog or empty. Sample data goes into a throwaway folder, never the real store.
 enum DemoMode {
 
     static var isEnabled: Bool {
@@ -86,7 +86,9 @@ enum DemoMode {
                            items: [item("Pastel de nata ×6", "7.20"), item("Galão ×2", "2.40", [me, blair]),
                                    item("Espresso", "1.80", [alex])],
                            total: amount("11.40"), source: .camera), pastelaria),
-            (ReceiptRecord(id: timeOutID, groupID: lisbonID, merchant: "Time Out Market", date: daysAgo(0),
+            (ReceiptRecord(id: timeOutID, groupID: lisbonID, merchant: "Time Out Market",
+                           location: "Av. 24 de Julho 49, Lisboa", date: daysAgo(0),
+                           time: ClockTime(hour: 20, minute: 15), paymentMethod: "Mastercard",
                            category: .food, paidBy: casey.id,
                            items: [item("Bacalhau à Brás", "18.50", [casey, alex]),
                                    item("Grilled octopus", "22.00", [me, blair]),
@@ -155,7 +157,7 @@ enum DemoMode {
             flow.addReceipt(to: lisbonID)
         case "mine", "sort":
             router.tab = .receipts
-        case "profile":
+        case "profile", "profileedit":
             router.tab = .profile
         case "settings":
             router.tab = .profile
@@ -177,7 +179,10 @@ enum DemoMode {
         let record = ReceiptRecord(
             groupID: lisbonID,
             merchant: "Mercado da Ribeira",
+            location: "Av. 24 de Julho 49, Lisboa",
             date: Calendar.current.startOfDay(for: Date()),
+            time: ClockTime(hour: 13, minute: 42),
+            paymentMethod: "Visa",
             category: .groceries,
             paidBy: Person.meID,
             items: [item("Sardinhas", "12.00", confidence: 0.95), item("Queijo Serra", "9.80", confidence: 0.9),
@@ -185,7 +190,7 @@ enum DemoMode {
             tax: amount("1.50"),
             total: amount("26.50"),
             source: .camera,
-            autofilled: [.merchant, .category, .total, .tax, .items],
+            autofilled: [.merchant, .location, .time, .payment, .category, .total, .tax, .items],
             unreadable: [.date],
             pageImageCount: 1
         )

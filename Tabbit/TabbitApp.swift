@@ -134,7 +134,11 @@ struct RootView: View {
             }
         }
         .sensoryFeedback(.selection, trigger: router.tab)
-        .preferredColorScheme(appearance.colorScheme)
+        .background {
+            AppearanceApplier(setting: appearance)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
         .onAppear {
             checkWhatsNew()
         }
@@ -155,7 +159,7 @@ struct RootView: View {
         case .idle:
             EmptyView()
         case .processing:
-            ProcessingOverlay()
+            ProcessingOverlay(usesIntelligence: flow.isUsingIntelligence)
         case .failed(let message):
             ErrorOverlay(
                 message: message,
@@ -269,6 +273,8 @@ struct ClayTabBar: View {
 
 /// Shown while a scan is being read.
 struct ProcessingOverlay: View {
+    var usesIntelligence: Bool = false
+
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
@@ -286,6 +292,10 @@ struct ProcessingOverlay: View {
                     Text("Reading your receipt…")
                         .font(Theme.Fonts.headline)
                         .foregroundStyle(Theme.Colors.text)
+                    if usesIntelligence {
+                        StatusPill(title: "Apple Intelligence", symbol: "sparkles", tone: .positive)
+                            .transition(.opacity)
+                    }
                     Label("Everything stays on this iPhone", systemImage: "lock.fill")
                         .font(Theme.Fonts.caption)
                         .foregroundStyle(Theme.Colors.secondaryText)
@@ -294,8 +304,9 @@ struct ProcessingOverlay: View {
             }
             .padding(Theme.Spacing.xxl)
         }
+        .animation(Theme.Motion.standard, value: usesIntelligence)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Reading your receipt")
+        .accessibilityLabel(usesIntelligence ? "Reading your receipt with Apple Intelligence" : "Reading your receipt")
     }
 }
 

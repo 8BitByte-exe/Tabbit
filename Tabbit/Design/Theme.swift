@@ -209,6 +209,12 @@ enum Theme {
     enum Motion {
         /// Press feedback: quick and soft.
         static let press = Animation.easeOut(duration: 0.16)
+        /// Sinking in: fast, so even a quick tap shows it.
+        static let pressIn = Animation.easeOut(duration: 0.08)
+        /// Coming back up: a little slower, so the press reads clearly.
+        static let pressOut = Animation.easeOut(duration: 0.22)
+        /// How long a quick tap holds the pressed look (seconds).
+        static let minimumPress: Double = 0.14
         /// Appearing/disappearing content and value changes.
         static let standard = Animation.snappy(duration: 0.3)
         /// Opening and closing drop-downs: smooth, no bounce.
