@@ -218,7 +218,8 @@ struct ReceiptMapView: View {
                         .annotationTitles(.hidden)
                     }
                 }
-                .mapStyle(.standard(pointsOfInterest: .excludingAll))
+                // Muted, without other businesses: the receipts' pins are what stands out.
+                .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))
                 .mapControls {
                 }
             } else {
@@ -376,7 +377,7 @@ private struct PinCard: View {
                         .foregroundStyle(Theme.Colors.text)
                         .fixedSize(horizontal: false, vertical: true)
                     if !pin.address.isEmpty {
-                        Label(pin.address, systemImage: "mappin.and.ellipse")
+                        Label(pin.address, systemImage: "mappin")
                             .font(Theme.Fonts.caption)
                             .foregroundStyle(Theme.Colors.secondaryText)
                             .lineLimit(2)
@@ -439,14 +440,11 @@ private struct MapIntroCard: View {
                     .foregroundStyle(Theme.Colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                    Label("Apple Maps gets each store's name and address once, to find it, and draws the map.",
-                          systemImage: "map")
-                    Label("Items, amounts, people and photos never leave your iPhone.", systemImage: "lock.fill")
-                    Label("Places are kept with your receipts, on this iPhone only.", systemImage: "iphone")
+                    point("Apple Maps gets each store's name and address once, to find it, and draws the map.",
+                          symbol: "map")
+                    point("Items, amounts, people and photos never leave your iPhone.", symbol: "lock.fill")
+                    point("Places are kept with your receipts, on this iPhone only.", symbol: "iphone")
                 }
-                .font(Theme.Fonts.callout)
-                .foregroundStyle(Theme.Colors.text)
-                .fixedSize(horizontal: false, vertical: true)
                 Button(action: onTurnOn) {
                     Label("Turn On Map", systemImage: "map.fill")
                 }
@@ -457,6 +455,20 @@ private struct MapIntroCard: View {
                     .frame(maxWidth: .infinity)
             }
         }
+    }
+
+    /// One line of what's sent and what isn't, its icon in a fixed column so the text lines up.
+    private func point(_ text: String, symbol: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.m) {
+            Image(systemName: symbol)
+                .foregroundStyle(Theme.Colors.secondaryText)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            Text(text)
+                .foregroundStyle(Theme.Colors.text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(Theme.Fonts.callout)
     }
 }
 
