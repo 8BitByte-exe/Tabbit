@@ -322,11 +322,28 @@ enum ReceiptPrompt {
     The category is the kind of business, one of: \(categories).
     """
 
-    /// The prompt for one receipt, or "" if it has no amounts to label.
-    static func make(for receipt: NumberedReceipt) -> String {
+    /// The prompt for one receipt, or "" if it has no amounts to label. `photoSections` is
+    /// how many sections the attached photo has (0 when there is no photo, see `ReceiptPhoto`).
+    static func make(for receipt: NumberedReceipt, photoSections: Int = 0) -> String {
         guard !receipt.entries.isEmpty else {
             return ""
         }
-        return "Label the \(receipt.entries.count) numbered lines of this receipt.\n\n" + receipt.text
+        var prompt = "Label the \(receipt.entries.count) numbered lines of this receipt.\n\n"
+        if photoSections > 0 {
+            prompt += photoNote(sections: photoSections) + "\n\n"
+        }
+        return prompt + receipt.text
+    }
+
+    /// What the model is told about the photo. The amounts always come from the text.
+    static func photoNote(sections: Int) -> String {
+        var layout = "The photo shows the same receipt."
+        if sections > 1 {
+            layout = "The photo shows the same receipt cut into \(sections) sections side by side: " +
+                "read the left section from top to bottom, then the next one."
+        }
+        return layout + " Use it to see which name and price are printed on the same line, " +
+            "which lines are indented details, and how misspelled words are really spelled. " +
+            "The line numbers and amounts are in the text below."
     }
 }

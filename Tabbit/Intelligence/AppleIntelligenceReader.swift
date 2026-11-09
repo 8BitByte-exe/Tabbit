@@ -1,6 +1,7 @@
 #if canImport(FoundationModels)
 import Foundation
 import FoundationModels
+import UIKit
 
 // Apple Intelligence's on-device language model (iOS 26). Nothing here goes over
 // the network: Foundation Models runs entirely on the iPhone.
@@ -114,14 +115,47 @@ enum AppleIntelligenceReader {
         }
     }
 
+    /// A new session with Tabbit's instructions. One session reads one receipt.
+    static func makeSession() -> LanguageModelSession {
+        return LanguageModelSession(instructions: ReceiptPrompt.instructions)
+    }
+
     /// Asks the on-device model to label the receipt's lines. Greedy sampling, so the
     /// same scan always gives the same answer.
-    static func read(prompt: String) async throws -> ModelReceiptReading {
-        let session = LanguageModelSession(instructions: ReceiptPrompt.instructions)
+    static func read(prompt: String, session: LanguageModelSession) async throws -> ModelReceiptReading {
         let response = try await session.respond(to: prompt, generating: GeneratedReceiptReading.self,
                                                  options: GenerationOptions(sampling: .greedy))
         return response.content.plain
     }
+
+    /// True if this build can show the model a photo: built with the iOS 27 SDK and running
+    /// on iOS 27 or later. The model reads the photo on the device, like the text.
+    static var canSeePhotos: Bool {
+        #if compiler(>=6.4)
+        if #available(iOS 27.0, *) {
+            return true
+        }
+        #endif
+        return false
+    }
+
+    /// Like `read(prompt:session:)`, with the receipt's photo next to the text (iOS 27).
+    /// Throws `PhotoUnsupported` on older systems.
+    static func read(prompt: String, photo: UIImage, session: LanguageModelSession) async throws -> ModelReceiptReading {
+        #if compiler(>=6.4)
+        if #available(iOS 27.0, *) {
+            let response = try await session.respond(generating: GeneratedReceiptReading.self,
+                                                     options: GenerationOptions(sampling: .greedy)) {
+                prompt
+                Attachment(photo)
+            }
+            return response.content.plain
+        }
+        #endif
+        throw PhotoUnsupported()
+    }
+
+    struct PhotoUnsupported: Error {}
 
     /// True if the prompt didn't fit the model's context window.
     static func isTooLong(_ error: Error) -> Bool {
@@ -143,6 +177,27 @@ enum AppleIntelligenceReader {
             return true
         }
         return false
+    }
+}
+/// One request to the model, carried into the timeout's task. The session may be one
+/// that was warmed up while the scan was being read.
+@available(iOS 26.0, *)
+final class ModelRequest: @unchecked Sendable {
+    let prompt: String
+    let photo: UIImage?
+    let session: LanguageModelSession
+
+    init(prompt: String, photo: UIImage?, session: LanguageModelSession?) {
+        self.prompt = prompt
+        self.photo = photo
+        self.session = session ?? AppleIntelligenceReader.makeSession()
+    }
+
+    func run() async throws -> ModelReceiptReading {
+        if let photo = photo {
+            return try await AppleIntelligenceReader.read(prompt: prompt, photo: photo, session: session)
+        }
+        return try await AppleIntelligenceReader.read(prompt: prompt, session: session)
     }
 }
 #endif

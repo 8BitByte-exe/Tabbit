@@ -6,7 +6,9 @@ struct SettingsView: View {
 
     @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
     @AppStorage(OCRSettings.languageCorrectionKey) private var languageCorrection: Bool = false
+    @AppStorage(OCRSettings.documentReaderKey) private var documentReader: Bool = true
     @AppStorage(ReceiptIntelligence.enabledKey) private var usesIntelligence: Bool = true
+    @AppStorage(ReceiptIntelligence.photoKey) private var showsPhoto: Bool = true
     @AppStorage(MapSettings.enabledKey) private var mapEnabled: Bool = false
     @State private var intelligenceStatus: IntelligenceStatus = ReceiptIntelligence.status
     @State private var usage: StorageUsage?
@@ -33,6 +35,16 @@ struct SettingsView: View {
                         .font(Theme.Fonts.caption)
                         .foregroundStyle(Theme.Colors.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
+                    if OCRSettings.hasDocumentReader {
+                        Toggle(isOn: $documentReader) {
+                            Text("Read receipts as documents")
+                        }
+                        .toggleStyle(ClayToggleStyle())
+                        Text("Uses Vision's document reader, which finds the receipt's rows so prices stay with their names. Turn it off to use the older text reader.")
+                            .font(Theme.Fonts.caption)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 section("Apple Intelligence") {
@@ -125,6 +137,16 @@ struct SettingsView: View {
                 Text("Read receipts with Apple Intelligence")
             }
             .toggleStyle(ClayToggleStyle())
+            if usesIntelligence && ReceiptIntelligence.canSeePhotos {
+                Toggle(isOn: $showsPhoto) {
+                    Text("Look at the photo too")
+                }
+                .toggleStyle(ClayToggleStyle())
+                Text("Apple Intelligence sees the receipt's photo next to the scanned text, on this iPhone. It helps with faded print and misspelled names; amounts still come from the scan. Turn it off for slightly faster reading.")
+                    .font(Theme.Fonts.caption)
+                    .foregroundStyle(Theme.Colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         Text(intelligenceStatus.explanation)
             .font(Theme.Fonts.caption)

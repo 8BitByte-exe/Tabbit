@@ -78,10 +78,14 @@ Tabbit/
                              (no address / waiting / found / not found), pins (one per spot)
     AppInfo.swift            Changelog (What's New), StorageUsage
   Intelligence/              Apple Intelligence (roadmap tier 1), all on-device
-    ReceiptIntelligence.swift  status (IntelligenceStatus), Settings toggle, refine(ProcessedScan),
-                               timeout, retry with a shorter prompt, IntelligenceTrace
+    ReceiptIntelligence.swift  status (IntelligenceStatus), Settings toggles (on, photo), warmUp() (prewarms
+                               a session during OCR), refine(ProcessedScan, warmup:), timeout, retry
+                               without the photo / with a shorter prompt, IntelligenceTrace
     AppleIntelligenceReader.swift  FoundationModels only (#if canImport, iOS 26): @Generable line labels
-                               (no optional fields), session, error checks
+                               (no optional fields), session, photo read (#if compiler(>=6.4), iOS 27:
+                               Attachment(UIImage) in the prompt builder), ModelRequest, error checks
+    ReceiptPhoto.swift         the photo for the model: pages cropped to the text, cut into 1–4 overlapping
+                               sections side by side (about square), 896 px long side
     ModelReceiptVerifier.swift ModelReceiptReading (plain Swift labels), ScanEvidence, assemble():
                                amounts from the scan, the model's labels added to the rules' evidence
                                (modelEvidence), ItemReconciler for the items, totals chosen by
@@ -98,9 +102,12 @@ Tabbit/
                                alone), one receipt at a time, throttling waited out; PlaceSearching protocol
   Scanning/
     DocumentScannerView.swift  VNDocumentCameraViewController wrapped for SwiftUI
-    TextRecognizer.swift       VNRecognizeTextRequest (.accurate, top 3 candidates); RecognitionOptions,
-                               OCRSettings (language correction toggle, default off)
-    ScanProcessor.swift        OCR → parse → JPEG pages/thumbnail (off the main thread); writeExport(for:)
+    TextRecognizer.swift       read(): all pages in parallel, document reader on iOS 26+ else
+                               VNRecognizeTextRequest (.accurate, top 3); RecognitionOptions, OCRSettings
+                               (language correction default off, document reader default on)
+    DocumentReader.swift       RecognizeDocumentsRequest (iOS 26, tier 2): lines → blocks, table rows →
+                               RecognizedTextBlock.row (DocumentRows matches lines to rows)
+    ScanProcessor.swift        async: OCR alongside JPEG compression → parse → model photo; writeExport(for:)
     ExportRedactor.swift       blanks card/account/phone digits in exports
   Parsing/
     LineGrouper.swift          rebuilds receipt lines from Vision blocks: tilt guesses, grouping,
@@ -267,7 +274,9 @@ The design is tiered and entirely on-device. Each phone gets the best tier it su
    - **Done (v1.1):** Foundation Models (tier 1). The prompt shows the receipt in parts and numbers the item and total lines (detail lines under an item are indented without a number); the model labels each number (item, discount, subtotal, tax, taxTotal, tip, total, payment, savings, unitPrice, other), names the items and gives the brand name, category and date. It never writes an amount: `ModelReceiptVerifier` takes them from the scan, adds the model's labels to the layout and keyword evidence of each possible purchase, lets `ItemReconciler` pick the items that add up, tries the subtotal/tax/tip/total combinations (model labels first, keywords as a second opinion) and keeps the one that adds up, and uses the model's receipt unless the rules' adds up better. Item names must plausibly spell out the printed text; store names must be on the scan and lose store numbers and branches. 45 s timeout; a too-long receipt is retried shorter. Settings has a status row and an on/off toggle. `ReceiptParserKind.appleIntelligence` marks receipts it read, and `Receipt.intelligence` (an `IntelligenceTrace`) keeps the model's raw labels for Export Scan Data.
    - Lesson from the first 1.1 build: with optional `@Generable` fields the model left the total empty on every receipt, so every reading was rejected. Keep every generated field required (empty string or 0 for "none"), and never let the model copy numbers.
    - Lesson from the second 1.1 build (a Sobeys receipt): labelling every amount line on its own, the model called "1 @ 2/ $9.00" detail lines and the card slip's "Purchase $29.36" items, "you saved" lines discounts, and the supermarket "food". So the model now sees the receipt in parts with detail lines indented and unnumbered, its labels are evidence added to the layout's rather than the answer, the category list explains groceries vs dining, and department headings outrank its category. Lower-case names get capitals.
-   - Next: Vision's document reader (`RecognizeDocumentsRequest`, tier 2) for better rows and amounts.
+   - **Done (1.2):** Vision's document reader (tier 2) is the default OCR on iOS 26+, with the text recognizer as the per-page fallback and a Settings switch. Its table rows become `RecognizedTextBlock.row`; `LineGrouper` joins blocks of one row up to 1.5 text heights apart (never text printed in the same place) and sends a lone price to its row's name. `ScanResult.reader`/`seconds` record which reader ran and how long it took.
+   - **Done (1.2):** on iOS 27 the model also sees the photo (`ReceiptPhoto`, Settings switch "Look at the photo too"). It still labels the numbered OCR lines and never writes amounts; the photo helps it pair names with prices and spell names. A photo error retries at once with text only. iOS 27 code needs the iOS 27 SDK: it's inside `#if compiler(>=6.4)`, and the `build` job switches to the newest non-beta Xcode on the runner. The model session is created and prewarmed when a scan starts, so it loads while OCR runs. `IntelligenceTrace.photo/reader/readSeconds` record what was used.
+   - Not used: Private Cloud Compute (the receipt would leave the phone) and Vision's OCRTool as a model tool (the OCR is already in the prompt; a tool call only adds a round trip).
    - The model can only be tested on the phone; CI runners can't run Apple Intelligence, so tests feed `ModelReceiptReading`s (line labels, right and wrong) to the verifier. When a real receipt reads badly, ask the owner for its Export Scan Data: the `intelligence` trace shows each label the model gave.
 4. **Done:** saving with editing (v0.4): design system, saved receipts, editable receipt screen, on-device storage with photos.
 5. **Done (v1.0):** splitting.
