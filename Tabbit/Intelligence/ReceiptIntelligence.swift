@@ -59,6 +59,10 @@ enum ReceiptIntelligence {
     /// Give up and keep the rules result after this long (seconds). The model writes one
     /// short label per amount line, which takes a while on a long receipt.
     static let timeout: Double = 45
+    /// The most the reading with the photo may take (seconds). After that the photo is
+    /// dropped and the text alone gets the rest of `timeout`, so a slow photo never costs
+    /// the whole reading.
+    static let photoTimeout: Double = 20
 
     static var isEnabled: Bool {
         return UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
@@ -134,7 +138,11 @@ enum ReceiptIntelligence {
                     // Nothing with an amount on it: the rules result stands.
                     return processed
                 }
-                let remaining = timeout - Date().timeIntervalSince(started)
+                var remaining = timeout - Date().timeIntervalSince(started)
+                if photo != nil {
+                    remaining = min(remaining, photoTimeout)
+                }
+                let attemptStarted = Date()
                 let warmSession = warmup?.take() as? LanguageModelSession
                 let request = ModelRequest(prompt: prompt, photo: photo, session: warmSession)
                 do {
@@ -147,17 +155,23 @@ enum ReceiptIntelligence {
                     var trace = ModelReceiptVerifier.trace(
                         of: reading, numbered: numbered, outcome: outcome,
                         seconds: Date().timeIntervalSince(started))
-                    trace.photo = photoNote
+                    trace.photo = photo == nil ? photoNote
+                        : photoNote + String(format: ", %.1f s", Date().timeIntervalSince(attemptStarted))
                     trace.reader = processed.scan.reader
                     trace.readSeconds = processed.scan.seconds
                     result.receipt.intelligence = trace
                     return result
                 } catch {
-                    // The photo didn't work (too big for the context, or not supported):
-                    // the text alone, right away.
-                    if photo != nil && !(error is TimedOut) && !AppleIntelligenceReader.isGuardrail(error) {
+                    // The photo didn't work (too slow, too big for the context, or not
+                    // supported): the text alone, right away, with the time that's left.
+                    if photo != nil && !AppleIntelligenceReader.isGuardrail(error) {
                         photo = nil
-                        photoNote = "failed, read without it: \(String(describing: error).prefix(120))"
+                        let seconds = String(format: "%.1f s", Date().timeIntervalSince(attemptStarted))
+                        if error is TimedOut {
+                            photoNote += ", too slow (\(seconds)), read without it"
+                        } else {
+                            photoNote += ", failed after \(seconds), read without it: \(String(describing: error).prefix(120))"
+                        }
                         continue
                     }
                     // A receipt too long for the model's context: try again with less of it.
