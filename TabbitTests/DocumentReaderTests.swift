@@ -76,6 +76,19 @@ final class DocumentReaderTests: XCTestCase {
         XCTAssertEqual(ExportRedactor.redact(scan).reader, "documents")
     }
 
+    // MARK: - Languages
+
+    func testReaderUsesThePhonesLanguagesAndEnglish() {
+        let supported = ["en", "fr", "de", "zh-Hans", "pt-BR"]
+        XCTAssertEqual(ReaderLanguages.pick(preferred: ["en-CA"], supported: supported), ["en"])
+        XCTAssertEqual(ReaderLanguages.pick(preferred: ["fr-CA", "en-CA"], supported: supported), ["fr", "en"])
+        XCTAssertEqual(ReaderLanguages.pick(preferred: ["de-DE"], supported: supported), ["de", "en"])
+        XCTAssertEqual(ReaderLanguages.pick(preferred: ["pt_BR"], supported: supported), ["pt-BR", "en"])
+        // A language the reader doesn't support is skipped; English is always there.
+        XCTAssertEqual(ReaderLanguages.pick(preferred: ["is-IS"], supported: supported), ["en"])
+        XCTAssertEqual(ReaderLanguages.pick(preferred: [], supported: []), ["en-US"])
+    }
+
     // MARK: - Photo for Apple Intelligence
 
     func testPhotoSectionsMakeThePictureAboutSquare() {

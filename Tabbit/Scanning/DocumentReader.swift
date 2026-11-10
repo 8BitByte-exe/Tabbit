@@ -20,6 +20,15 @@ enum DocumentReader {
         var request = RecognizeDocumentsRequest()
         request.textRecognitionOptions.useLanguageCorrection = options.languageCorrection
         request.textRecognitionOptions.maximumCandidateCount = 3
+        // Left to detect the language itself, the reader fills a faint letter in from any
+        // alphabet ("13.00名", "$24.9îŚ"). Receipts are in the phone's languages, so it reads
+        // only those (and English), like the text recognizer reads only English.
+        let supported = request.supportedRecognitionLanguages.map { language in language.minimalIdentifier }
+        let languages = ReaderLanguages.pick(preferred: Locale.preferredLanguages, supported: supported)
+        request.textRecognitionOptions.automaticallyDetectLanguage = false
+        request.textRecognitionOptions.recognitionLanguages = languages.map { identifier in
+            Locale.Language(identifier: identifier)
+        }
         if options.languageCorrection {
             request.textRecognitionOptions.customWords = TextRecognizer.receiptWords
         }
@@ -93,5 +102,36 @@ enum DocumentRows {
             }
         }
         return best
+    }
+}
+
+/// Which languages the document reader reads. Plain strings, so tests cover it.
+enum ReaderLanguages {
+
+    /// The phone's languages that the reader supports, in order, then English if it isn't
+    /// among them. Matched by base language ("fr-CA" uses "fr"). Each is given as the
+    /// supported identifier.
+    static func pick(preferred: [String], supported: [String]) -> [String] {
+        var picked: [String] = []
+        for identifier in preferred + ["en-US"] {
+            let base = baseLanguage(identifier)
+            let exact = supported.first { language in normalized(language) == normalized(identifier) }
+            let sameBase = supported.first { language in baseLanguage(language) == base }
+            if let match = exact ?? sameBase, !picked.contains(match) {
+                picked.append(match)
+            }
+        }
+        if picked.isEmpty {
+            picked = ["en-US"]
+        }
+        return picked
+    }
+
+    private static func normalized(_ identifier: String) -> String {
+        return identifier.replacingOccurrences(of: "_", with: "-").lowercased()
+    }
+
+    private static func baseLanguage(_ identifier: String) -> String {
+        return normalized(identifier).components(separatedBy: "-").first ?? ""
     }
 }
