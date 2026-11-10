@@ -5,7 +5,7 @@ name: Tabbit
 
 options:
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "17.0"
   createIntermediateGroups: true
 
 settings:
@@ -23,20 +23,25 @@ targets:
   Tabbit:
     type: application
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "17.0"
     sources:
       - path: Tabbit
+        excludes:
+          - "Resources/PrivacyInfo.xcprivacy"
+      # Apple's privacy manifest (App Store requirement), copied into the app bundle.
+      - path: Tabbit/Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: "$(APP_BUNDLE_ID)"
-        MARKETING_VERSION: "0.4.0"
-        CURRENT_PROJECT_VERSION: "4"
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "5"
         # Tabbit/Assets.xcassets/AppIcon.appiconset (made by Design/AppIcon/make_app_icon.py)
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
         # Swift 5 language mode keeps concurrency checking lenient on newer Xcode.
         SWIFT_VERSION: "5.0"
-        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
         # iPhone only.
         TARGETED_DEVICE_FAMILY: "1"
       configs:
@@ -51,7 +56,11 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSRequiresIPhoneOS: true
         NSCameraUsageDescription: "$(APP_DISPLAY_NAME) uses the camera to scan your receipts."
-        UILaunchScreen: {}
+        NSPhotoLibraryAddUsageDescription: "$(APP_DISPLAY_NAME) saves receipt photos to your library when you ask it to."
+        # No custom encryption (App Store export compliance).
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
@@ -62,7 +71,7 @@ targets:
   TabbitTests:
     type: bundle.unit-test
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "17.0"
     sources:
       - path: TabbitTests
     dependencies:
@@ -72,7 +81,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: "$(APP_BUNDLE_ID).tests"
         GENERATE_INFOPLIST_FILE: "YES"
         SWIFT_VERSION: "5.0"
-        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
         TARGETED_DEVICE_FAMILY: "1"
 
 schemes:

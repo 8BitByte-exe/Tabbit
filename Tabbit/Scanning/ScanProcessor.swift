@@ -55,11 +55,15 @@ enum ScanProcessor {
 
     private static let exportFilePrefix = "Tabbit-scan-"
 
-    /// Writes a saved receipt as a JSON export to the temporary folder and returns its URL.
+    /// Writes a receipt as a JSON export to the temporary folder and returns its URL.
     /// Personal numbers are blanked out first (ExportRedactor), and earlier
     /// exports are deleted so receipt data doesn't pile up on the device.
-    /// If the user corrected any fields, those are included as `corrected`.
-    static func writeExport(for saved: SavedReceipt) -> URL? {
+    /// The receipt as it stands now is included as `corrected` (the right answer
+    /// when the export becomes a test fixture). Nil for receipts without a scan.
+    static func writeExport(for record: ReceiptRecord) -> URL? {
+        guard let scan = record.scan else {
+            return nil
+        }
         let fileManager = FileManager.default
         let folder = fileManager.temporaryDirectory
         removeOldExports(in: folder)
@@ -67,13 +71,13 @@ enum ScanProcessor {
         let now = Date()
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         let export = ScanExport(
-            scan: ExportRedactor.redact(saved.scan),
-            parsed: saved.parsed,
+            scan: ExportRedactor.redact(scan),
+            parsed: record.parsed,
             exportedAt: now,
             appVersion: appVersion,
-            languageCorrection: saved.languageCorrection,
+            languageCorrection: record.languageCorrection,
             redacted: true,
-            corrected: saved.isEdited ? saved.receipt : nil
+            corrected: record.asReceipt()
         )
         let url = folder.appendingPathComponent(exportFilePrefix + timestamp(for: now) + ".json")
         do {

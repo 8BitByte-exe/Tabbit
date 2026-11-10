@@ -5,9 +5,9 @@ struct ReceiptCheck: Equatable {
     enum Kind: Equatable {
         /// The line items add up to the subtotal.
         case itemsMatchSubtotal
-        /// Subtotal + tax equals the total.
+        /// Subtotal + tax (+ tip) equals the total.
         case subtotalPlusTaxMatchesTotal
-        /// Items + tax equals the total (used when there's no subtotal).
+        /// Items + tax (+ tip) equals the total (used when there's no subtotal).
         case itemsPlusTaxMatchesTotal
     }
 
@@ -43,7 +43,7 @@ enum ReceiptValidator {
         }
 
         if let total = receipt.total {
-            let tax = receipt.tax ?? Decimal(0)
+            let tax = (receipt.tax ?? Decimal(0)) + (receipt.tip ?? Decimal(0))
             if let subtotal = receipt.subtotal {
                 let computed = subtotal + tax
                 checks.append(ReceiptCheck(
