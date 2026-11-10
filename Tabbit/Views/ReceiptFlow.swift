@@ -204,6 +204,9 @@ final class ReceiptFlow: ObservableObject {
 
     /// Saves the editor's receipt. Returns an error message, or nil on success.
     func save(_ record: ReceiptRecord, from session: EditorSession) -> String? {
+        // Saving from the editor means the person has looked at the "Check" marks.
+        var record = record
+        record.checks = []
         do {
             if session.isNew {
                 try store.add(record, pageJPEGs: session.pageJPEGs, thumbnailJPEG: session.thumbnailJPEG)

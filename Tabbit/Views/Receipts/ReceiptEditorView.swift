@@ -241,16 +241,27 @@ struct ReceiptEditorView: View {
         }
     }
 
-    /// A section title with the field's scan mark.
+    /// A section title with the field's scan mark, and why to check it when Tabbit isn't sure.
     private func fieldLabel(_ title: String, _ field: ReceiptField?) -> some View {
-        HStack(spacing: Theme.Spacing.s) {
-            SectionLabel(title: title)
-            if let field = field, preview.unreadable.contains(field) {
-                StatusPill(title: "Couldn't read", symbol: "exclamationmark.triangle.fill", tone: .caution)
-            } else if let field = field, preview.autofilled.contains(field) {
-                IconBadge(symbol: "sparkles", tone: .positive, size: 20)
-                    .accessibilityElement()
-                    .accessibilityLabel("Filled in from the scan")
+        let check = field.flatMap { field in preview.checks.first { check in check.field == field } }
+        return VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(spacing: Theme.Spacing.s) {
+                SectionLabel(title: title)
+                if let field = field, preview.unreadable.contains(field) {
+                    StatusPill(title: "Couldn't read", symbol: "exclamationmark.triangle.fill", tone: .caution)
+                } else if check != nil {
+                    StatusPill(title: "Check", symbol: "eye.fill", tone: .caution)
+                } else if let field = field, preview.autofilled.contains(field) {
+                    IconBadge(symbol: "sparkles", tone: .positive, size: 20)
+                        .accessibilityElement()
+                        .accessibilityLabel("Filled in from the scan")
+                }
+            }
+            if let check = check, let field = field, !preview.unreadable.contains(field) {
+                Label(check.reason, systemImage: "info.circle.fill")
+                    .font(Theme.Fonts.caption)
+                    .foregroundStyle(Theme.Colors.warning)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -295,8 +295,8 @@ enum ReceiptPrompt {
     - totals: the subtotal, taxes, tip and total.
     - payment and other details: how it was paid, savings summaries, surveys. Nothing there is an item.
 
-    Lines that matter start with a number in brackets, like [4]. Give each numbered line exactly one kind, \
-    and label each number only once:
+    Lines that matter start with a number in brackets, like [4]. Answer once for each numbered line, in order, \
+    with exactly one kind:
     - item: something bought, including fuel, deposits and bag fees. \
     When an item's name is on the line above its price, the price line is the item.
     - discount: money taken off what was bought, like a coupon or member discount, usually with a minus sign.
@@ -304,7 +304,8 @@ enum ReceiptPrompt {
     - tax: one tax, like TAX, SALES TAX, HST 13%, GST, PST, QST or VAT. Tax is always less than the total.
     - taxTotal: several taxes added up, like TOTAL TAX.
     - tip: a tip, gratuity or service charge that was added to the bill.
-    - total: the final amount to pay, like TOTAL, FINAL, Total after tax, Sub with tax, AMOUNT DUE or BALANCE DUE.
+    - total: the final amount to pay, like TOTAL, FINAL, Total after tax, Sub with tax, AMOUNT DUE or BALANCE DUE, \
+    or the amount on a card slip or payment stub that lists no products ("Amount: $13.50").
     - payment: how it was paid or money given back, like VISA, DEBIT, CASH, TENDERED or CHANGE.
     - savings: "you saved", regular or original prices, points and rewards. These are information, not purchases.
     - unitPrice: a price per litre, gallon, kg or lb on a line of its own, or an amount of fuel or weight.
@@ -317,9 +318,11 @@ enum ReceiptPrompt {
     Leave the name empty for every other kind.
 
     The store name is the business's brand only, like "Best Buy", "Shell" or "Trader Joe's", \
-    with OCR misspellings fixed. Never include the address, city, branch, store number or slogan.
+    spelled the way the business spells it: OCR often misreads letters (rn for m, 0 for O, 1 for l), so fix them. \
+    Never include the address, city, branch, store number or slogan.
 
-    The category is the kind of business, one of: \(categories).
+    The category is the kind of business, one of: \(categories). Decide it from the store's name; \
+    when the name doesn't say, decide from what was bought (bananas, milk and bread mean groceries).
     """
 
     /// The prompt for one receipt, or "" if it has no amounts to label. `photoSections` is

@@ -56,6 +56,13 @@ enum ReceiptField: String, Codable, CaseIterable {
     case items
 }
 
+/// A scanned field Tabbit isn't sure about, and why ("could also mean Nov 26, 2008").
+/// Shown as a "Check" mark in the editor until the field is changed or the receipt is saved.
+struct FieldCheck: Equatable, Codable {
+    var field: ReceiptField
+    var reason: String
+}
+
 /// Where a receipt came from.
 enum ReceiptSource: String, Codable {
     case camera
@@ -96,6 +103,8 @@ struct ReceiptRecord: Identifiable, Equatable {
     var autofilled: Set<ReceiptField>
     /// Fields scanning looked for but couldn't read.
     var unreadable: Set<ReceiptField>
+    /// Fields scanning filled in but isn't sure about, with the reason.
+    var checks: [FieldCheck]
 
     var pageImageCount: Int
     /// Raw OCR and the parser's result, kept for exports and fixtures.
@@ -110,7 +119,7 @@ struct ReceiptRecord: Identifiable, Equatable {
          time: ClockTime? = nil, paymentMethod: String = "", category: SpendCategory = .other, paidBy: UUID = Person.meID, items: [SplitItem] = [],
          tax: Decimal? = nil, tip: TipValue? = nil, total: Decimal? = nil, includeFees: Bool = true,
          source: ReceiptSource = .manual, autofilled: Set<ReceiptField> = [], unreadable: Set<ReceiptField> = [],
-         pageImageCount: Int = 0, scan: ScanResult? = nil, parsed: Receipt? = nil, languageCorrection: Bool? = nil,
+         checks: [FieldCheck] = [], pageImageCount: Int = 0, scan: ScanResult? = nil, parsed: Receipt? = nil, languageCorrection: Bool? = nil,
          place: ReceiptPlace? = nil) {
         self.id = id
         self.groupID = groupID
@@ -131,6 +140,7 @@ struct ReceiptRecord: Identifiable, Equatable {
         self.source = source
         self.autofilled = autofilled
         self.unreadable = unreadable
+        self.checks = checks
         self.pageImageCount = pageImageCount
         self.scan = scan
         self.parsed = parsed
@@ -297,7 +307,7 @@ extension ReceiptRecord: Codable {
     private enum CodingKeys: String, CodingKey {
         case schema, id, groupID, createdAt, updatedAt, merchant, location, date, time, paymentMethod, category
         case paidBy, items
-        case tax, tip, total, includeFees, source, autofilled, unreadable, pageImageCount
+        case tax, tip, total, includeFees, source, autofilled, unreadable, checks, pageImageCount
         case scan, parsed, languageCorrection, place
     }
 
@@ -323,6 +333,7 @@ extension ReceiptRecord: Codable {
             source: try container.decodeIfPresent(ReceiptSource.self, forKey: .source) ?? .manual,
             autofilled: try container.decodeIfPresent(Set<ReceiptField>.self, forKey: .autofilled) ?? [],
             unreadable: try container.decodeIfPresent(Set<ReceiptField>.self, forKey: .unreadable) ?? [],
+            checks: (try? container.decodeIfPresent([FieldCheck].self, forKey: .checks)) ?? [],
             pageImageCount: try container.decodeIfPresent(Int.self, forKey: .pageImageCount) ?? 0,
             scan: try container.decodeIfPresent(ScanResult.self, forKey: .scan),
             parsed: try container.decodeIfPresent(Receipt.self, forKey: .parsed),
@@ -353,6 +364,9 @@ extension ReceiptRecord: Codable {
         try container.encode(source, forKey: .source)
         try container.encode(autofilled, forKey: .autofilled)
         try container.encode(unreadable, forKey: .unreadable)
+        if !checks.isEmpty {
+            try container.encode(checks, forKey: .checks)
+        }
         try container.encode(pageImageCount, forKey: .pageImageCount)
         try container.encodeIfPresent(scan, forKey: .scan)
         try container.encodeIfPresent(parsed, forKey: .parsed)

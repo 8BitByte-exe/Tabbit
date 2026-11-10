@@ -144,7 +144,8 @@ enum ReceiptIntelligence {
                 }
                 let attemptStarted = Date()
                 let warmSession = warmup?.take() as? LanguageModelSession
-                let request = ModelRequest(prompt: prompt, photo: photo, session: warmSession)
+                let request = ModelRequest(prompt: prompt, lineCount: numbered.entries.count, photo: photo,
+                                           session: warmSession)
                 do {
                     let reading = try await withTimeout(seconds: max(remaining, 1)) {
                         try await request.run()

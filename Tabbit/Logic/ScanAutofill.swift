@@ -10,7 +10,13 @@ enum ScanAutofill {
         var autofilled: Set<ReceiptField> = []
         var unreadable: Set<ReceiptField> = []
 
-        let merchant = CategoryGuesser.repairedName(parsed.merchant ?? "")
+        var checks: [FieldCheck] = []
+        // Misread letters in the store's name, fixed from the iPhone's dictionary.
+        let printedMerchant = parsed.merchant ?? ""
+        let merchant = OCRSpelling.repairedName(printedMerchant)
+        if merchant != printedMerchant {
+            checks.append(FieldCheck(field: .merchant, reason: "Corrected from “\(printedMerchant)”, which the scan seems to have misread."))
+        }
         if merchant.isEmpty {
             unreadable.insert(.merchant)
         } else {
@@ -45,10 +51,29 @@ enum ScanAutofill {
         }
 
         let receiptLines = LineGrouper.lines(from: processed.scan).map { line in line.text }
-        let category = CategoryGuesser.guess(merchant: merchant, items: parsed.lineItems.map { item in item.name },
-                                             suggestion: processed.suggestedCategory, receiptLines: receiptLines)
+        if let parsedDate = parsed.date, let check = dateCheck(for: parsedDate, lines: receiptLines, now: now) {
+            checks.append(check)
+        }
+
+        let guess = CategoryGuesser.guessWithSource(merchant: merchant, items: parsed.lineItems.map { item in item.name },
+                                                    suggestion: processed.suggestedCategory, receiptLines: receiptLines)
+        let category = guess.category
         if category != .other {
             autofilled.insert(.category)
+        }
+        switch guess.source {
+        case .intelligence:
+            checks.append(FieldCheck(field: .category, reason: "Apple Intelligence's guess: the store's name doesn't say what it is."))
+        case .items:
+            checks.append(FieldCheck(field: .category, reason: "Guessed from the items: the store's name doesn't say what it is."))
+        case .merchant, .departments, .none:
+            break
+        }
+
+        let isPaymentSlip = parsed.notes.contains(RulesReceiptParser.paymentSlipNote)
+        if parsed.total != nil && !isPaymentSlip
+            && ReceiptValidator.checks(for: parsed).contains(where: { check in !check.passed }) {
+            checks.append(FieldCheck(field: .total, reason: "The items, tax and total don't add up. Compare them with the receipt."))
         }
 
         if parsed.total != nil {
@@ -63,7 +88,10 @@ enum ScanAutofill {
             autofilled.insert(.tip)
         }
         if parsed.lineItems.isEmpty {
-            unreadable.insert(.items)
+            // A card slip has no items to read.
+            if !isPaymentSlip {
+                unreadable.insert(.items)
+            }
         } else {
             autofilled.insert(.items)
         }
@@ -90,11 +118,42 @@ enum ScanAutofill {
             source: source,
             autofilled: autofilled,
             unreadable: unreadable,
+            checks: checks,
             pageImageCount: processed.pageJPEGs.count,
             scan: processed.scan,
             parsed: parsed,
             languageCorrection: processed.languageCorrection
         )
+    }
+}
+
+extension ScanAutofill {
+
+    /// Receipts are normally scanned within this many days; another reading of the date
+    /// this recent is worth a look.
+    static let freshDays = 60
+
+    /// A "Check" mark for the date: when it's long ago or in the future, or when the printed
+    /// digits could also mean another recent date ("03/04/26").
+    static func dateCheck(for date: CalendarDate, lines: [String], now: Date) -> FieldCheck? {
+        guard let reading = ReceiptDateParser.firstReading(in: lines, reference: now), reading.date == date else {
+            return nil
+        }
+        if !ReceiptDateParser.isRecent(date, reference: now) {
+            let when = (ReceiptDateParser.daysBefore(now, date) ?? 0) < 0 ? "in the future" : "more than a year ago"
+            return FieldCheck(field: .date, reason: "Printed as “\(reading.printed)”, which is \(when).")
+        }
+        let otherRecent = reading.alternatives.first { other in
+            guard let days = ReceiptDateParser.daysBefore(now, other) else {
+                return false
+            }
+            return days >= -2 && days <= freshDays
+        }
+        if let other = otherRecent, let value = other.dateValue {
+            return FieldCheck(field: .date,
+                              reason: "Printed as “\(reading.printed)”, which could also mean \(DateText.long(value)).")
+        }
+        return nil
     }
 }
 
@@ -159,16 +218,34 @@ enum CategoryGuesser {
     /// suggestion, which understands the whole receipt; then keywords in the items.
     static func guess(merchant: String, items: [String], suggestion: SpendCategory? = nil,
                       receiptLines: [String] = []) -> SpendCategory {
+        return guessWithSource(merchant: merchant, items: items, suggestion: suggestion,
+                               receiptLines: receiptLines).category
+    }
+
+    /// What the category was decided from, so a weak guess can be marked for checking.
+    enum Source: Equatable {
+        case merchant
+        case departments
+        case intelligence
+        case items
+        case none
+    }
+
+    static func guessWithSource(merchant: String, items: [String], suggestion: SpendCategory? = nil,
+                                receiptLines: [String] = []) -> (category: SpendCategory, source: Source) {
         if let category = match(merchant) {
-            return category
+            return (category: category, source: .merchant)
         }
         if let category = departmentHint(in: receiptLines) {
-            return category
+            return (category: category, source: .departments)
         }
         if let suggestion = suggestion, suggestion != .other {
-            return suggestion
+            return (category: suggestion, source: .intelligence)
         }
-        return match(items.joined(separator: " ")) ?? .other
+        if let category = match(items.joined(separator: " ")) {
+            return (category: category, source: .items)
+        }
+        return (category: .other, source: .none)
     }
 
     /// Food departments a supermarket prints over its items. One of the clear ones, or two of any.
@@ -191,51 +268,8 @@ enum CategoryGuesser {
         return nil
     }
 
-    /// Letter pairs OCR reads for one letter: "Cinerna" is "Cinema", "vvine" is "wine".
-    private static let ocrConfusions: [(String, String)] = [("rn", "m"), ("vv", "w")]
-
-    /// The category a keyword in the text names. When nothing matches, tries again with
-    /// common OCR confusions undone ("REVUE CINERNA" is a cinema).
     private static func match(_ text: String) -> SpendCategory? {
-        if let category = exactMatch(text) {
-            return category
-        }
-        var repaired = text.lowercased()
-        for (misread, letter) in ocrConfusions {
-            repaired = repaired.replacingOccurrences(of: misread, with: letter)
-        }
-        guard repaired != text.lowercased() else {
-            return nil
-        }
-        return exactMatch(repaired)
-    }
-
-    /// A store name with OCR confusions undone in words that become a category keyword:
-    /// "Revue Cinerna" reads "Revue Cinema". Other words are left as printed.
-    static func repairedName(_ name: String) -> String {
-        let words = name.components(separatedBy: " ")
-        let repaired = words.map { word -> String in
-            let lowered = word.lowercased()
-            guard lowered.count >= 4, exactMatch(lowered) == nil else {
-                return word
-            }
-            var fixed = lowered
-            for (misread, letter) in ocrConfusions {
-                fixed = fixed.replacingOccurrences(of: misread, with: letter)
-            }
-            guard fixed != lowered, exactMatch(fixed) != nil,
-                  fixed.allSatisfy({ character in character.isLetter }) else {
-                return word
-            }
-            if word == word.uppercased() {
-                return fixed.uppercased()
-            }
-            if let first = word.first, first.isUppercase {
-                return fixed.prefix(1).uppercased() + fixed.dropFirst()
-            }
-            return fixed
-        }
-        return repaired.joined(separator: " ")
+        return exactMatch(text)
     }
 
     private static func exactMatch(_ text: String) -> SpendCategory? {

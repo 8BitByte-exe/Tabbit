@@ -20,6 +20,10 @@ import Foundation
 /// and total, tax and payment words in German, Spanish, French, Italian and Dutch.
 struct RulesReceiptParser {
 
+    /// When the receipt was scanned. Dates whose digits can be read several ways are read
+    /// as the one close to this ("26-11-08" scanned in 2026 is November 8, 2026).
+    var referenceDate: Date = Date()
+
     func parse(_ scan: ScanResult) -> Receipt {
         // Try each tilt guess (usually just one) and keep the result whose
         // numbers agree best. Ties keep the earlier, geometrically better guess.
@@ -163,15 +167,20 @@ struct RulesReceiptParser {
         } else if computed.count > 1 {
             notes.append("Worked out \(computed.count) prices from their quantity and unit price.")
         }
-        let items = counted.map { candidate in candidate.item }
+        var items = counted.map { candidate in candidate.item }
         if total == nil && subtotal == nil && tax == nil && tip == nil,
            let only = RulesReceiptParser.singleAmountTotal(of: items) {
             total = only
-            notes.append(RulesReceiptParser.singleAmountNote)
+            if RulesReceiptParser.isPaymentSlip(items) {
+                items = []
+                notes.append(RulesReceiptParser.paymentSlipNote)
+            } else {
+                notes.append(RulesReceiptParser.singleAmountNote)
+            }
         }
         let merchant = RulesReceiptParser.findMerchant(in: lines)
         let texts = lines.map { line in line.text }
-        let date = ReceiptDateParser.firstDate(in: texts)
+        let date = ReceiptDateParser.firstDate(in: texts, reference: referenceDate)
 
         return Receipt(
             merchant: merchant,
@@ -200,6 +209,24 @@ struct RulesReceiptParser {
     }
 
     static let singleAmountNote = "Only one amount is printed, so it's the total."
+    static let paymentSlipNote = "This is a payment slip without a list of items, so only the total is filled in."
+
+    /// Words that name a payment rather than a product ("Amount: $13.50", "PURCHASE 13.50").
+    static let transactionWords: Set<String> = [
+        "AMOUNT", "AMT", "PURCHASE", "SALE", "PAYMENT", "PAID", "CHARGE", "CHARGED", "TRANSACTION", "TOTAL",
+        "TYPE", "USD", "CAD", "EUR", "GBP", "BETRAG", "IMPORTE", "MONTANT", "IMPORTO", "BEDRAG",
+    ]
+
+    /// True if the only "item" is a payment line: a card slip or stub, not an itemized receipt.
+    static func isPaymentSlip(_ items: [ReceiptLineItem]) -> Bool {
+        guard items.count == 1, let name = items.first?.name else {
+            return false
+        }
+        let words = ReceiptKeywords.words(in: name.uppercased()).filter { word in
+            word.rangeOfCharacter(from: .letters) != nil
+        }
+        return !words.isEmpty && words.allSatisfy { word in transactionWords.contains(word) }
+    }
 
     // MARK: - Lines
 

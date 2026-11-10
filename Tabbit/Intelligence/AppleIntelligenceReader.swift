@@ -26,12 +26,11 @@ enum GeneratedLineKind {
     case other
 }
 
+/// The model's answer for one numbered line. The answers come as an array with exactly one
+/// entry per numbered line, in order, so the model can't skip, repeat or invent lines.
 @available(iOS 26.0, *)
 @Generable
-struct GeneratedLineLabel {
-    @Guide(description: "The number in brackets at the start of the line, like 4 for [4]")
-    var line: Int
-
+struct GeneratedLineAnswer {
     @Guide(description: "What the line is")
     var kind: GeneratedLineKind
 
@@ -39,23 +38,61 @@ struct GeneratedLineLabel {
     var name: String
 }
 
+/// The shape of the model's whole answer, built for each receipt so the `lines` array has
+/// exactly as many entries as the receipt has numbered lines.
 @available(iOS 26.0, *)
-@Generable
-struct GeneratedReceiptReading {
-    @Guide(description: "The business's brand name only, like Best Buy, Shell or Trader Joe's. Never the address, city, branch or store number.")
-    var storeName: String
+enum ReceiptAnswerSchema {
 
-    @Guide(description: "One label for each numbered line, in order, each number only once")
-    var lines: [GeneratedLineLabel]
+    static func make(lineCount: Int) throws -> GenerationSchema {
+        let answer = DynamicGenerationSchema(type: GeneratedLineAnswer.self, guides: [])
+        let lines = DynamicGenerationSchema(arrayOf: answer, minimumElements: lineCount, maximumElements: lineCount)
+        let text = DynamicGenerationSchema(type: String.self, guides: [])
+        let flag = DynamicGenerationSchema(type: Bool.self, guides: [])
+        let root = DynamicGenerationSchema(name: "ReceiptReading", description: "What the receipt says", properties: [
+            DynamicGenerationSchema.Property(
+                name: "storeName",
+                description: "The business's brand name only, like Best Buy, Shell or Trader Joe's, spelled correctly: fix letters the scan misread, like rn for m or 0 for O. Never the address, city, branch or store number.",
+                schema: text, isOptional: false),
+            DynamicGenerationSchema.Property(
+                name: "isItemized",
+                description: "True if the receipt lists what was bought. False for a card slip, payment stub or transaction record that only shows the amount paid.",
+                schema: flag, isOptional: false),
+            DynamicGenerationSchema.Property(
+                name: "lines",
+                description: "Exactly one answer for each numbered line, in order: the first answer is for [1], the second for [2], and so on.",
+                schema: lines, isOptional: false),
+            DynamicGenerationSchema.Property(
+                name: "pricesIncludeTax",
+                description: "True if the receipt says its prices already include the tax, like VAT included or HST included",
+                schema: flag, isOptional: false),
+            DynamicGenerationSchema.Property(
+                name: "category",
+                description: "The kind of business: one category word from the list in the instructions. Decide from the store's name, and when the name doesn't say, from what was bought.",
+                schema: text, isOptional: false),
+            DynamicGenerationSchema.Property(
+                name: "date",
+                description: "The purchase date as YYYY-MM-DD, or an empty string if no date is printed",
+                schema: text, isOptional: false),
+        ])
+        return try GenerationSchema(root: root, dependencies: [])
+    }
 
-    @Guide(description: "True if the receipt says its prices already include the tax, like VAT included or HST included")
-    var pricesIncludeTax: Bool
-
-    @Guide(description: "The kind of business: one category word from the list in the instructions, like groceries for a supermarket")
-    var category: String
-
-    @Guide(description: "The purchase date as YYYY-MM-DD, or an empty string if no date is printed")
-    var date: String
+    /// The answer in plain Swift. Answer number i is for line [i + 1].
+    static func reading(from content: GeneratedContent) throws -> ModelReceiptReading {
+        let answers = try content.value([GeneratedLineAnswer].self, forProperty: "lines")
+        var labels: [ModelReceiptReading.Label] = []
+        for (index, answer) in answers.enumerated() {
+            labels.append(ModelReceiptReading.Label(line: index + 1, kind: answer.kind.plain, name: answer.name))
+        }
+        return ModelReceiptReading(
+            storeName: try content.value(String.self, forProperty: "storeName"),
+            labels: labels,
+            pricesIncludeTax: try content.value(Bool.self, forProperty: "pricesIncludeTax"),
+            category: try content.value(String.self, forProperty: "category"),
+            date: try content.value(String.self, forProperty: "date"),
+            isItemized: try content.value(Bool.self, forProperty: "isItemized")
+        )
+    }
 }
 
 @available(iOS 26.0, *)
@@ -74,21 +111,6 @@ extension GeneratedLineKind {
         case .unitPrice: return .unitPrice
         case .other: return .other
         }
-    }
-}
-
-@available(iOS 26.0, *)
-extension GeneratedReceiptReading {
-    var plain: ModelReceiptReading {
-        return ModelReceiptReading(
-            storeName: storeName,
-            labels: lines.map { label in
-                ModelReceiptReading.Label(line: label.line, kind: label.kind.plain, name: label.name)
-            },
-            pricesIncludeTax: pricesIncludeTax,
-            category: category,
-            date: date
-        )
     }
 }
 
@@ -120,12 +142,13 @@ enum AppleIntelligenceReader {
         return LanguageModelSession(instructions: ReceiptPrompt.instructions)
     }
 
-    /// Asks the on-device model to label the receipt's lines. Greedy sampling, so the
-    /// same scan always gives the same answer.
-    static func read(prompt: String, session: LanguageModelSession) async throws -> ModelReceiptReading {
-        let response = try await session.respond(to: prompt, generating: GeneratedReceiptReading.self,
+    /// Asks the on-device model to label the receipt's `lineCount` numbered lines. Greedy
+    /// sampling, so the same scan always gives the same answer.
+    static func read(prompt: String, lineCount: Int, session: LanguageModelSession) async throws -> ModelReceiptReading {
+        let schema = try ReceiptAnswerSchema.make(lineCount: lineCount)
+        let response = try await session.respond(to: prompt, schema: schema,
                                                  options: GenerationOptions(sampling: .greedy))
-        return response.content.plain
+        return try ReceiptAnswerSchema.reading(from: response.content)
     }
 
     /// True if this build can show the model a photo: built with the iOS 27 SDK and running
@@ -141,15 +164,16 @@ enum AppleIntelligenceReader {
 
     /// Like `read(prompt:session:)`, with the receipt's photo next to the text (iOS 27).
     /// Throws `PhotoUnsupported` on older systems.
-    static func read(prompt: String, photo: UIImage, session: LanguageModelSession) async throws -> ModelReceiptReading {
+    static func read(prompt: String, lineCount: Int, photo: UIImage,
+                     session: LanguageModelSession) async throws -> ModelReceiptReading {
         #if compiler(>=6.4)
         if #available(iOS 27.0, *) {
-            let response = try await session.respond(generating: GeneratedReceiptReading.self,
-                                                     options: GenerationOptions(sampling: .greedy)) {
+            let schema = try ReceiptAnswerSchema.make(lineCount: lineCount)
+            let response = try await session.respond(schema: schema, options: GenerationOptions(sampling: .greedy)) {
                 prompt
                 Attachment(photo)
             }
-            return response.content.plain
+            return try ReceiptAnswerSchema.reading(from: response.content)
         }
         #endif
         throw PhotoUnsupported()
@@ -184,20 +208,23 @@ enum AppleIntelligenceReader {
 @available(iOS 26.0, *)
 final class ModelRequest: @unchecked Sendable {
     let prompt: String
+    let lineCount: Int
     let photo: UIImage?
     let session: LanguageModelSession
 
-    init(prompt: String, photo: UIImage?, session: LanguageModelSession?) {
+    init(prompt: String, lineCount: Int, photo: UIImage?, session: LanguageModelSession?) {
         self.prompt = prompt
+        self.lineCount = lineCount
         self.photo = photo
         self.session = session ?? AppleIntelligenceReader.makeSession()
     }
 
     func run() async throws -> ModelReceiptReading {
         if let photo = photo {
-            return try await AppleIntelligenceReader.read(prompt: prompt, photo: photo, session: session)
+            return try await AppleIntelligenceReader.read(prompt: prompt, lineCount: lineCount, photo: photo,
+                                                          session: session)
         }
-        return try await AppleIntelligenceReader.read(prompt: prompt, session: session)
+        return try await AppleIntelligenceReader.read(prompt: prompt, lineCount: lineCount, session: session)
     }
 }
 #endif
