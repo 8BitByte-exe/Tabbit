@@ -37,12 +37,26 @@ enum LineGrouper {
     /// All lines of the scan: page by page, top to bottom.
     /// `slopeChoice` picks which tilt guess to use on each page (0 = best).
     static func lines(from scan: ScanResult, slopeChoice: Int = 0) -> [TextLine] {
+        // Characters OCR took from the wrong alphabet are read as the receipt's own first.
+        let alphabet = ReceiptAlphabet(texts: scan.blocks.map { block in block.text })
         var result: [TextLine] = []
         for pageIndex in 0..<max(scan.pageCount, 0) {
-            let pageLines = lines(from: scan.blocks(onPage: pageIndex), pageIndex: pageIndex, slopeChoice: slopeChoice)
+            let blocks = scan.blocks(onPage: pageIndex).map { block in normalized(block, alphabet: alphabet) }
+            let pageLines = lines(from: blocks, pageIndex: pageIndex, slopeChoice: slopeChoice)
             result.append(contentsOf: pageLines)
         }
         return result
+    }
+
+    /// The block with its text (and other readings) in the receipt's alphabet.
+    static func normalized(_ block: RecognizedTextBlock, alphabet: ReceiptAlphabet) -> RecognizedTextBlock {
+        let text = alphabet.normalized(block.text)
+        let alternatives = block.alternatives.map { alternative in alphabet.normalized(alternative) }
+        if text == block.text && alternatives == block.alternatives {
+            return block
+        }
+        return RecognizedTextBlock(text: text, confidence: block.confidence, boundingBox: block.boundingBox,
+                                   pageIndex: block.pageIndex, alternatives: alternatives, row: block.row)
     }
 
     /// How many tilt guesses are worth trying for this scan (1 to 3).

@@ -128,6 +128,9 @@ enum TextRecognizer {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = options.languageCorrection
+        if let supported = try? request.supportedRecognitionLanguages() {
+            request.recognitionLanguages = ReaderLanguages.pick(preferred: Locale.preferredLanguages, supported: supported)
+        }
         if options.languageCorrection {
             request.customWords = receiptWords
         }

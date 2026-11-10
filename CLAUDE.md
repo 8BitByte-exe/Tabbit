@@ -22,7 +22,7 @@ The owner has no Mac and no Xcode. **The GitHub Actions macOS runner is the only
 Scanning, OCR, parsing, splitting and storage must run on the iPhone.
 
 - No networking code: no `URLSession`, no web APIs, no analytics, no third-party SDKs.
-- Use only on-device Apple frameworks: VisionKit, Vision, PhotosUI, Photos (save only), Charts, Foundation, Foundation Models, and MapKit for the opt-in map.
+- Use only on-device Apple frameworks: VisionKit, Vision, PhotosUI, Photos (save only), Charts, Foundation, Foundation Models, NaturalLanguage (language detection), and MapKit for the opt-in map.
 - The only way data leaves the phone is when the user explicitly shares something: Settle Up Copy/Send, CSV export, Save to Photos, Export Scan Data.
 - **The one exception is the map, and it's opt-in** (owner's choice, v1.2). It's off until the person turns it on, on the Map tab or in Settings (`MapSettings.enabledKey`). Then MapKit's `MKLocalSearch` receives each receipt's store name and printed address, once (`PlaceQuery`), and MapKit loads the map tiles. Nothing else is sent: no items, amounts, people or photos. While it's off, no `Map` view is drawn and nothing is looked up. Found places are stored with the receipt (`ReceiptRecord.place`), so each address is looked up only once.
 - `Tabbit/Resources/PrivacyInfo.xcprivacy` declares no tracking and no collected data, plus the required-reason APIs (UserDefaults CA92.1, disk space 85F4.1). Update it if the app ever touches another required-reason API.
@@ -124,6 +124,7 @@ Tabbit/
     ReceiptDetailsParser.swift time of purchase, store address (street + city/postal lines), payment method
                                (card brand, debit, cash; never digits), printed tax rate
     ReceiptDateParser.swift    purchase date (explicit patterns, not NSDataDetector)
+    ReceiptAlphabet.swift      the receipt's script and language; stray characters from other alphabets read in context
     RulesReceiptParser.swift   the rules-based parser (fallback tier): analyze() (roles, amounts, price
                                column), itemCandidates() with Evidence (layout + keywords) and detail lines,
                                sale/deal and weight lines, codes/flags in names, discounts, tip (not tip
@@ -247,6 +248,7 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Deals ("2 FOR 1", "BUY 1 GET 1", "MIX & MATCH", "B1G1") describe prices and are never items; one with money off ("FREE", "GET") is a discount.
   - Sanity checks: tax is always less than the total (and rarely over 30% of it); a printed rate ("HST 13%") confirms a tax; tips are usually 10/15/18/20% of the bill before or after tax; a card payment, or cash minus change, confirms the total and stands in for one that couldn't be read.
   - Fix OCR misreads with general tools, never a rule per mistake (owner's instruction after "Cinerna"). `OCRSpelling` is an edit distance where look-alike letters (rn/m, 0/O, 1/l, 5/S…) are cheap; the store name is repaired from the iPhone's dictionary (`UITextChecker`, on-device) only when one look-alike swap explains the difference, and the model's corrected store name counts as on the scan when it's a look-alike of it.
+  - Read each receipt in its own language and alphabet (owner's instruction: use context, like a person would). `ReceiptAlphabet` finds the main script and language (NaturalLanguage's `NLLanguageRecognizer`, on-device) and `LineGrouper.lines(from: scan)` reads every block through it: a word clearly in another script stays (a Greek word on an English receipt, an English line on a Greek one), a stray letter from another alphabet becomes its look-alike or is dropped ("13.00名"), and an accent the language doesn't write is removed only where the word looks garbled (next to digits, or "BUYă"). The document reader reads the phone's languages plus English first and reads a page again in the receipt's own language, or detecting it, when the words say so (`ReaderLanguages.retry`). The prompt tells the model the receipt's language and to read words in context.
   - A price OCR could only partly read ("$24.9îŚ" for $24.99) isn't dropped: `AmountParser.damagedAmount` keeps the digits it could read, and `RulesReceiptParser.analyze` fills in the rest from the arithmetic (the subtotal, or total less tax, minus the other prices) when that fits, else by digit shape ("S" for 5). Both readers see the filled-in price, and the editor shows a Check mark on the items.
   - Card slips and stubs ("Amount: $13.50", no products) have no items, only a total (`RulesReceiptParser.isPaymentSlip`, the model's `isItemized`).
   - All-number dates are read every way they can be (month/day/year, day/month/year, two-digit year first) and the usual reading wins unless it's long ago or in the future and another reading is from the last year: "26-11-08" scanned in November 2026 is 2026-11-08.

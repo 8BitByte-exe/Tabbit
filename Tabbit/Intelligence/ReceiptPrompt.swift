@@ -79,6 +79,8 @@ struct NumberedReceipt {
     let text: String
     /// How prices that were partly unreadable were filled in (`RulesReceiptParser.repairNotes`).
     let repairNotes: [String]
+    /// The receipt's main language ("en", "fr"), or nil when it's unclear (`ReceiptAlphabet`).
+    let language: String?
 
     init(scan: ScanResult, slopeChoice: Int = 0, maxCharacters: Int = ReceiptPrompt.maxCharacters) {
         self.init(lines: LineGrouper.lines(from: scan, slopeChoice: slopeChoice), maxCharacters: maxCharacters)
@@ -90,6 +92,7 @@ struct NumberedReceipt {
         let candidates = RulesReceiptParser.itemCandidates(in: analyzed)
         self.candidates = candidates
         self.repairNotes = RulesReceiptParser.repairNotes(in: analyzed)
+        self.language = ReceiptAlphabet.mainLanguage(of: lines.map { line in line.text })
         var detailLines: Set<Int> = []
         for candidate in candidates where candidate.isDetail {
             detailLines.insert(candidate.lineIndex)
@@ -324,6 +327,12 @@ enum ReceiptPrompt {
     spelled the way the business spells it: OCR often misreads letters (rn for m, 0 for O, 1 for l), so fix them. \
     Never include the address, city, branch, store number or slogan.
 
+    Read every word in context, the way a person would. A receipt is written in one language, \
+    sometimes with whole lines in a second one, and never switches language or alphabet in the middle of a word. \
+    OCR sometimes puts a stray letter from another alphabet or an odd accent into a word: \
+    on an English receipt a word with one strange character is still an English word, so name it as the English word \
+    that fits the receipt. A line that is entirely in the second language stays in that language.
+
     The category is the kind of business, one of: \(categories). Decide it from the store's name; \
     when the name doesn't say, decide from what was bought (bananas, milk and bread mean groceries).
     """
@@ -335,10 +344,22 @@ enum ReceiptPrompt {
             return ""
         }
         var prompt = "Label the \(receipt.entries.count) numbered lines of this receipt.\n\n"
+        if let note = languageNote(receipt.language) {
+            prompt += note + "\n\n"
+        }
         if photoSections > 0 {
             prompt += photoNote(sections: photoSections) + "\n\n"
         }
         return prompt + receipt.text
+    }
+
+    /// "This receipt is in French." for a receipt whose language is clear, else nil.
+    static func languageNote(_ language: String?) -> String? {
+        guard let language = language,
+              let name = Locale(identifier: "en_US").localizedString(forLanguageCode: language) else {
+            return nil
+        }
+        return "This receipt is in \(name)."
     }
 
     /// What the model is told about the photo. The amounts always come from the text.
