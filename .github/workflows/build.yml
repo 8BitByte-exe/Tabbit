@@ -150,10 +150,14 @@ jobs:
           mkdir -p screenshots
           for appearance in light dark; do
             xcrun simctl ui "$UDID" appearance "$appearance"
-            for screen in groups group swipe receipt settle edit category add mine sort profile profileedit settings whatsnew processing dialog empty; do
+            for screen in groups group swipe receipt settle edit category add mine sort map mappin mapfix mapoff groupmap profile profileedit settings whatsnew processing dialog empty; do
               xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
               xcrun simctl launch "$UDID" "$BUNDLE_ID" -TabbitDemo -TabbitScreen "$screen"
               sleep 5
+              # Map tiles come from Apple Maps and take a little longer to load.
+              case "$screen" in
+                map|mappin|groupmap) sleep 5 ;;
+              esac
               xcrun simctl io "$UDID" screenshot "screenshots/$screen-$appearance.png"
             done
           done

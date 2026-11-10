@@ -17,6 +17,7 @@ struct ReceiptEditorView: View {
     @State private var choosingCategory = false
     @State private var choosingDate = false
     @State private var choosingTime = false
+    @AppStorage(MapSettings.enabledKey) private var mapEnabled = false
     @FocusState private var focus: EditorFocus?
 
     enum EditorFocus: Hashable {
@@ -276,6 +277,13 @@ struct ReceiptEditorView: View {
                         .focused($focus, equals: .location)
                         .insetField()
                         .accessibilityLabel("Location")
+                    if mapEnabled && ReceiptMap.status(of: preview) == .notFound {
+                        Label("Apple Maps couldn't find this address. Add the street and city to pin it on the map.",
+                              systemImage: "mappin.slash")
+                            .font(Theme.Fonts.caption)
+                            .foregroundStyle(Theme.Colors.warning)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     fieldLabel("Date", .date)

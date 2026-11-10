@@ -6,6 +6,7 @@ struct TabbitApp: App {
     @StateObject private var store: TabbitStore
     @StateObject private var router: AppRouter
     @StateObject private var flow: ReceiptFlow
+    @StateObject private var places: PlaceFinder
 
     init() {
         // No global UINavigationBar styling: screens draw their own clay headers, and a
@@ -32,6 +33,7 @@ struct TabbitApp: App {
         _store = StateObject(wrappedValue: store)
         _router = StateObject(wrappedValue: router)
         _flow = StateObject(wrappedValue: flow)
+        _places = StateObject(wrappedValue: PlaceFinder())
     }
 
     var body: some Scene {
@@ -40,6 +42,7 @@ struct TabbitApp: App {
                 .environmentObject(store)
                 .environmentObject(router)
                 .environmentObject(flow)
+                .environmentObject(places)
         }
     }
 }
@@ -69,6 +72,14 @@ struct RootView: View {
             tab(.receipts) {
                 NavigationStack(path: $router.receiptsPath) {
                     MyReceiptsView()
+                        .navigationDestination(for: Route.self) { route in
+                            RouteView(route: route)
+                        }
+                }
+            }
+            tab(.map) {
+                NavigationStack(path: $router.mapPath) {
+                    ReceiptMapView(groupID: nil)
                         .navigationDestination(for: Route.self) { route in
                             RouteView(route: route)
                         }
@@ -206,6 +217,8 @@ struct RouteView: View {
             ReceiptPagerView(startID: id, groupID: groupID)
         case .settleUp(let id):
             SettleUpView(groupID: id)
+        case .map(let id):
+            ReceiptMapView(groupID: id)
         case .settings:
             SettingsView()
         }

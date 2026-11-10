@@ -18,7 +18,14 @@ struct GroupDetailView: View {
         Group {
             if let group = store.group(groupID) {
                 content(group)
-                    .clayNavigation(group.displayName) {
+                    .clayNavigation(group.displayName, titleInset: 116) {
+                        Button(action: {
+                            router.push(.map(group.id))
+                        }, label: {
+                            Image(systemName: "map.fill")
+                        })
+                        .buttonStyle(NeumorphicIconButtonStyle())
+                        .accessibilityLabel("Map of this group's receipts")
                         Button(action: {
                             editing = .edit(group)
                         }, label: {

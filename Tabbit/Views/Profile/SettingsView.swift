@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(AppearanceSetting.storageKey) private var appearance: AppearanceSetting = .system
     @AppStorage(OCRSettings.languageCorrectionKey) private var languageCorrection: Bool = false
     @AppStorage(ReceiptIntelligence.enabledKey) private var usesIntelligence: Bool = true
+    @AppStorage(MapSettings.enabledKey) private var mapEnabled: Bool = false
     @State private var intelligenceStatus: IntelligenceStatus = ReceiptIntelligence.status
     @State private var usage: StorageUsage?
     @State private var shareFile: ShareFile?
@@ -38,6 +39,17 @@ struct SettingsView: View {
                     intelligenceSection
                 }
 
+                section("Map") {
+                    Toggle(isOn: $mapEnabled) {
+                        Text("Show receipts on a map")
+                    }
+                    .toggleStyle(ClayToggleStyle())
+                    Text("Finds each receipt's store with Apple Maps, once, from the store's name and the address printed on the receipt. Apple Maps also draws the map. Items, amounts, people and photos stay on this iPhone.")
+                        .font(Theme.Fonts.caption)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 section("Your data") {
                     storageMeter
                     Button(action: exportCSV) {
@@ -64,7 +76,7 @@ struct SettingsView: View {
                               systemImage: "iphone")
                         Label("Receipts and photos are stored only here, encrypted while the phone is locked, and left out of iCloud Backup.",
                               systemImage: "lock.fill")
-                        Label("Nothing leaves your phone unless you share or export it.",
+                        Label("Nothing leaves your phone unless you share or export it. With the map on, Apple Maps gets each store's name and address, nothing else.",
                               systemImage: "square.and.arrow.up")
                     }
                     .font(Theme.Fonts.callout)

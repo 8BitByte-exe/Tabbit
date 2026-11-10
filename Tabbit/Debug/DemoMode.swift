@@ -5,8 +5,8 @@ import UIKit
 /// Screenshot mode for CI (Debug builds only; the Release IPA doesn't contain it).
 ///
 /// Launch arguments: `-TabbitDemo -TabbitScreen <screen>`, where screen is one of
-/// groups, group, swipe, receipt, settle, edit, category, add, mine, sort, profile, profileedit,
-/// settings, whatsnew, processing, dialog or empty. Sample data goes into a throwaway folder, never the real store.
+/// groups, group, swipe, receipt, settle, edit, category, add, mine, sort, map, mappin, mapfix, mapoff,
+/// groupmap, profile, profileedit, settings, whatsnew, processing, dialog or empty. Sample data goes into a throwaway folder, never the real store.
 enum DemoMode {
 
     static var isEnabled: Bool {
@@ -43,7 +43,7 @@ enum DemoMode {
     static let lisbonID = id(100)
     private static let flatID = id(101)
     private static let dinnerID = id(102)
-    private static let timeOutID = id(200)
+    static let timeOutID = id(200)
 
     private static func daysAgo(_ days: Int) -> Date {
         let today = Calendar.current.startOfDay(for: Date())
@@ -52,6 +52,16 @@ enum DemoMode {
 
     private static func amount(_ text: String) -> Decimal {
         return Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")) ?? 0
+    }
+
+    /// The receipt with its store already found on the map (so screenshots never look anything up).
+    private static func placed(_ record: ReceiptRecord, _ latitude: Double, _ longitude: Double) -> ReceiptRecord {
+        var copy = record
+        if let query = PlaceQuery.make(for: copy) {
+            copy.place = ReceiptPlace(query: query.key, found: FoundPlace(latitude: latitude, longitude: longitude,
+                                                                          address: copy.location))
+        }
+        return copy
     }
 
     private static func item(_ name: String, _ price: String, _ people: [Person] = [],
@@ -77,16 +87,19 @@ enum DemoMode {
                                               "6 PASTEL DE NATA        7.20", "2 GALAO                 2.40",
                                               "1 ESPRESSO              1.80", "", "TOTAL                  11.40"])
         let records: [(ReceiptRecord, UIImage?)] = [
-            (ReceiptRecord(groupID: lisbonID, merchant: "Hotel Alfama", date: daysAgo(3), category: .lodging,
-                           paidBy: me.id, total: amount("480.00")), nil),
-            (ReceiptRecord(groupID: lisbonID, merchant: "Tram 28", date: daysAgo(2), category: .transport,
-                           paidBy: blair.id, total: amount("25.60")), nil),
-            (ReceiptRecord(groupID: lisbonID, merchant: "Pastelaria Belém", date: daysAgo(1), category: .food,
-                           paidBy: alex.id,
-                           items: [item("Pastel de nata ×6", "7.20"), item("Galão ×2", "2.40", [me, blair]),
-                                   item("Espresso", "1.80", [alex])],
-                           total: amount("11.40"), source: .camera), pastelaria),
-            (ReceiptRecord(id: timeOutID, groupID: lisbonID, merchant: "Time Out Market",
+            (placed(ReceiptRecord(groupID: lisbonID, merchant: "Hotel Alfama", location: "Rua de São Miguel 12, Lisboa",
+                                  date: daysAgo(3), category: .lodging, paidBy: me.id, total: amount("480.00")),
+                    38.7114, -9.1296), nil),
+            (placed(ReceiptRecord(groupID: lisbonID, merchant: "Tram 28", location: "Praça Martim Moniz, Lisboa",
+                                  date: daysAgo(2), category: .transport, paidBy: blair.id, total: amount("25.60")),
+                    38.7163, -9.1361), nil),
+            (placed(ReceiptRecord(groupID: lisbonID, merchant: "Pastelaria Belém", location: "Rua de Belém 84, Lisboa",
+                                  date: daysAgo(1), category: .food, paidBy: alex.id,
+                                  items: [item("Pastel de nata ×6", "7.20"), item("Galão ×2", "2.40", [me, blair]),
+                                          item("Espresso", "1.80", [alex])],
+                                  total: amount("11.40"), source: .camera),
+                    38.6975, -9.2032), pastelaria),
+            (placed(ReceiptRecord(id: timeOutID, groupID: lisbonID, merchant: "Time Out Market",
                            location: "Av. 24 de Julho 49, Lisboa", date: daysAgo(0),
                            time: ClockTime(hour: 20, minute: 15), paymentMethod: "Mastercard",
                            category: .food, paidBy: casey.id,
@@ -94,7 +107,8 @@ enum DemoMode {
                                    item("Grilled octopus", "22.00", [me, blair]),
                                    item("Vinho verde", "16.00"),
                                    item("Pastéis", "6.50", [me])],
-                           tax: amount("3.78"), tip: .percent(amount("10")), source: .camera), nil),
+                           tax: amount("3.78"), tip: .percent(amount("10")), source: .camera),
+                    38.7069, -9.1459), nil),
             (ReceiptRecord(groupID: flatID, merchant: "Fresh Mart", date: daysAgo(2), category: .groceries,
                            paidBy: alex.id,
                            items: [item("Oat milk", "3.98"), item("Sourdough", "5.49"), item("Avocados", "4.50"),
@@ -108,9 +122,14 @@ enum DemoMode {
                                    item("Carbonara", "17.50", [me]), item("Tiramisu", "9.00")],
                            tax: amount("4.20"), tip: .amount(amount("9.00"))), nil),
             // My Receipts, over a few months for the profile charts.
-            (ReceiptRecord(merchant: "The Daily Grind", date: daysAgo(0), category: .coffee,
-                           items: [item("Oat latte", "5.25"), item("Almond croissant", "4.50")],
-                           tax: amount("0.87"), source: .camera), nil),
+            (placed(ReceiptRecord(merchant: "The Daily Grind", location: "Rua Augusta 120, Lisboa",
+                                  date: daysAgo(0), category: .coffee,
+                                  items: [item("Oat latte", "5.25"), item("Almond croissant", "4.50")],
+                                  tax: amount("0.87"), source: .camera),
+                    38.7108, -9.1376), nil),
+            // On a receipt, but Apple Maps found nothing for it: listed under "Not on the Map".
+            (notFound(ReceiptRecord(merchant: "Corner Kiosk", location: "Kiosk 3, Old Town",
+                                    date: daysAgo(2), category: .shopping, total: amount("6.50"))), nil),
             (ReceiptRecord(merchant: "Hardware Plus", date: daysAgo(1), category: .household,
                            items: [item("Extension cord", "12.99"), item("Wood screws", "6.49")],
                            tax: amount("1.56")), nil),
@@ -138,10 +157,20 @@ enum DemoMode {
         store.markPaid(Transfer(from: casey.id, to: me.id, cents: 4000), in: lisbonID)
     }
 
+    private static func notFound(_ record: ReceiptRecord) -> ReceiptRecord {
+        var copy = record
+        if let query = PlaceQuery.make(for: copy) {
+            copy.place = ReceiptPlace(query: query.key, found: nil)
+        }
+        return copy
+    }
+
     // MARK: - Screens
 
     @MainActor
     static func prepare(router: AppRouter, flow: ReceiptFlow, store: TabbitStore) {
+        // The map is on in every screenshot except the one that shows turning it on.
+        UserDefaults.standard.set(screen != "mapoff", forKey: MapSettings.enabledKey)
         switch screen {
         case "group", "swipe":
             router.groupsPath = [.group(lisbonID)]
@@ -157,6 +186,10 @@ enum DemoMode {
             flow.addReceipt(to: lisbonID)
         case "mine", "sort":
             router.tab = .receipts
+        case "map", "mappin", "mapfix", "mapoff":
+            router.tab = .map
+        case "groupmap":
+            router.groupsPath = [.group(lisbonID), .map(lisbonID)]
         case "profile", "profileedit":
             router.tab = .profile
         case "settings":

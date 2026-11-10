@@ -61,7 +61,8 @@ Tabbit 1.0: split with friends.
 
 ## App Privacy ("nutrition label")
 
-- **Data collection:** "We do not collect data from this app." Nothing is sent off the device; there is no analytics and no account.
+- **Data collection:** "We do not collect data from this app." Nothing is sent to the developer or anyone else; there is no analytics and no account.
+- **The map (opt-in, v1.2):** when the person turns it on, Apple Maps (MapKit) receives each receipt's store name and printed address to find it, and loads the map. That's Apple's own service, not data the developer collects, so the label should still be "no data collected". Check Apple's current guidance on MapKit before submitting, and mention the map in the privacy policy.
 - **Tracking:** none.
 - The bundled privacy manifest (`Tabbit/Resources/PrivacyInfo.xcprivacy`) matches: no tracking, no collected data, and two required-reason APIs: UserDefaults (CA92.1, the app's own settings) and disk space (85F4.1, shown in Settings).
 

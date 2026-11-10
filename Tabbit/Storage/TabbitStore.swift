@@ -204,9 +204,48 @@ final class TabbitStore: ObservableObject {
     func update(_ record: ReceiptRecord) throws {
         var updated = record
         updated.updatedAt = Date()
+        // A place found while the editor was open isn't lost when the edit is saved.
+        if updated.place == nil, let stored = receipt(updated.id)?.place {
+            updated.place = stored
+        }
         clean(&updated, members: memberIDs(for: updated.groupID))
         try write(updated)
         replaceInMemory(updated)
+    }
+
+    /// Saves where a receipt's store is, as Apple Maps found it. Not an edit, so the
+    /// receipt's "updated" time stays the same.
+    func setPlace(_ place: ReceiptPlace?, for receiptID: UUID) {
+        guard let index = receipts.firstIndex(where: { receipt in receipt.id == receiptID }) else {
+            return
+        }
+        var record = receipts[index]
+        record.place = place
+        do {
+            try write(record)
+            receipts[index] = record
+        } catch {
+            lastError = "Couldn't save where the receipt is: \(error.localizedDescription)"
+        }
+    }
+
+    /// The store's address, typed in by hand (the map's list of receipts without a place).
+    func setLocation(_ location: String, for receiptID: UUID) {
+        guard var record = receipt(receiptID) else {
+            return
+        }
+        let trimmed = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != record.location else {
+            return
+        }
+        record.location = trimmed
+        record.autofilled.remove(.location)
+        record.unreadable.remove(.location)
+        do {
+            try update(record)
+        } catch {
+            lastError = "Couldn't save the address: \(error.localizedDescription)"
+        }
     }
 
     func delete(_ receiptID: UUID) {
