@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Notes for working on Tabbit, a native SwiftUI app for scanning and splitting receipts on iOS.
+Notes for working on Tabbit, a native SwiftUI app for scanning and splitting receipts, and tracking freelance or small-business work, on iOS.
 
 ## The main constraint: no Mac, no local builds
 
@@ -22,8 +22,8 @@ The owner has no Mac and no Xcode. **The GitHub Actions macOS runner is the only
 Scanning, OCR, parsing, splitting and storage must run on the iPhone.
 
 - No networking code: no `URLSession`, no web APIs, no analytics, no third-party SDKs.
-- Use only on-device Apple frameworks: VisionKit, Vision, PhotosUI, Photos (save only), Charts, Foundation, Foundation Models, NaturalLanguage (language detection), and MapKit for the opt-in map.
-- The only way data leaves the phone is when the user explicitly shares something: Settle Up Copy/Send, CSV export, Save to Photos, Export Scan Data.
+- Use only on-device Apple frameworks: VisionKit, Vision, PhotosUI, Photos (save only), Charts, Foundation, Foundation Models, NaturalLanguage (language detection), PDFKit (invoice PDFs: text, pages, viewer), UniformTypeIdentifiers (the file importer), and MapKit for the opt-in map.
+- The only way data leaves the phone is when the user explicitly shares something: Settle Up Copy/Send, CSV export, a business's year CSV, sharing an invoice PDF, Save to Photos, Export Scan Data.
 - **The one exception is the map, and it's opt-in** (owner's choice, v1.2). It's off until the person turns it on, on the Map tab or in Settings (`MapSettings.enabledKey`). Then MapKit's `MKLocalSearch` receives each receipt's store name and printed address, once (`PlaceQuery`), and MapKit loads the map tiles. Nothing else is sent: no items, amounts, people or photos. While it's off, no `Map` view is drawn and nothing is looked up. Found places are stored with the receipt (`ReceiptRecord.place`), so each address is looked up only once.
 - `Tabbit/Resources/PrivacyInfo.xcprivacy` declares no tracking and no collected data, plus the required-reason APIs (UserDefaults CA92.1, disk space 85F4.1). Update it if the app ever touches another required-reason API.
 
@@ -56,7 +56,9 @@ Tabbit/
   Models/
     Person.swift             Person (me has the fixed Person.meID), displayName ("You")
     SplitGroup.swift         a group: name, category, members (me first), settlements
-    ReceiptRecord.swift      a saved receipt: location, time (ClockTime), payment method, SplitItem (assignees,
+    Work.swift               Business (freelance/business, tax set-aside %), Job (client, finished), Invoice
+                             (amount, sent/due/paid dates, attached PDF), InvoiceStatus
+    ReceiptRecord.swift      a saved receipt (in a group, a business via businessID/jobID, or My Receipts): location, time (ClockTime), payment method, SplitItem (assignees,
                              empty = everyone), TipValue ($/%), autofilled/unreadable marks, raw scan + parser
                              output; place on the map; Settlement
     ReceiptPlace.swift       where a receipt's store is (coordinates from Apple Maps, the query it came from)
@@ -77,6 +79,8 @@ Tabbit/
     ReceiptMap.swift         PlaceQuery (store name + printed address), each receipt's map status
                              (no address / waiting / found / not found), pins (one per spot)
     AppInfo.swift            Changelog (What's New), StorageUsage
+    WorkSummary.swift        a business's year (or a job's totals): earned (paid invoices), invoiced, waiting,
+                             overdue, expenses, profit, tax set-aside; years; WorkCSV (a year for an accountant)
   Intelligence/              Apple Intelligence (roadmap tier 1), all on-device
     ReceiptIntelligence.swift  status (IntelligenceStatus), Settings toggles (on, photo), warmUp() (prewarms
                                a session during OCR), refine(ProcessedScan, warmup:), timeout, retry
@@ -97,6 +101,8 @@ Tabbit/
     TabbitStore.swift        @MainActor store: Application Support/Receipts/{profile.json, groups.json,
                              <id>/receipt.json, page-N.jpg, thumbnail.jpg}; no iCloud Backup; complete
                              file protection; migrates v0.4 receipts to My Receipts; setPlace/setLocation
+    TabbitStore+Work.swift   businesses, jobs, invoices in work.json, invoice PDFs in Work/<invoice id>.pdf;
+                             setPaid, moveToBusiness; InvoiceDocument (images → PDF, PDF text, read on device)
   Maps/
     PlaceFinder.swift          opt-in Apple Maps lookups (MKLocalSearch: store + address, then the address
                                alone), one receipt at a time, throttling waited out; PlaceSearching protocol
@@ -131,9 +137,10 @@ Tabbit/
                                guides), VAT-included prices, rounding, inferred subtotal, reconciliation,
                                tilt choice, merchant
     ReceiptValidator.swift     arithmetic checks: items = subtotal, subtotal + tax + tip = total
+    InvoiceReader.swift        an invoice's amount due, number, sent and due dates (Net 30) from its lines
     RegexHelpers.swift         NSRegularExpression helpers (`Patterns.make`)
   Views/
-    AppRouter.swift            AppTab (Groups, My Receipts, Map, Profile), Route, per-tab navigation paths
+    AppRouter.swift            AppTab (Groups, My Receipts, Work, Map, Profile), Route, per-tab navigation paths
     ReceiptFlow.swift          @MainActor: source sheet → camera/photos → OCR → editor → save
     Shared/CommonViews.swift   ScreenHeader, NavHeader + clayNavigation, swipe-back fix, SheetHeader,
                                ClayDialog, DatePickerSheet, FloatingAddButton, BalancePill, AmountRow,
@@ -143,6 +150,10 @@ Tabbit/
     Receipts/                  MyReceiptsView (+ SortSheet), AddReceiptSheet, ReceiptEditorView
                                (+ CategoryPickerSheet), ReceiptPagerView (+ ReceiptDetailPage),
                                MoveReceiptSheet, PhotoViewer (+ ZoomableImageView)
+    Work/                      WorkView (tab: business cards, setup), BusinessEditorView (+ JobEditorView),
+                               BusinessDetailView (year switcher, year card, Jobs/Invoices/Expenses, InvoiceRow
+                               with a check button), JobDetailView, InvoiceEditorView (attach scan/photo/PDF,
+                               read it, PDFKitView)
     Map/ReceiptMapView.swift   the Map tab and each group's map: intro until turned on, MapKit map in a
                                clay card (no system controls), pins, the selected pin's receipts,
                                UnplacedReceiptsSheet (type an address for receipts without a place)
@@ -204,11 +215,12 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Respect Reduce Motion (no scale animation), Reduce Transparency (no blurred edges, add an outline) and Increase Contrast (outline).
   - Support Dynamic Type: use the text styles in `Theme.Fonts`, and switch the card layout at accessibility sizes.
   - Give every control an accessibility label.
-- **Screenshots:** the CI `test` job launches the Debug build with `-TabbitDemo -TabbitScreen <groups|group|swipe|receipt|settle|edit|category|add|mine|sort|map|mappin|mapfix|mapoff|groupmap|profile|profileedit|settings|whatsnew|processing|dialog|empty>` in light and dark mode. It uploads the `design-screenshots` artifact and force-pushes the PNGs to the **`ci-screenshots`** branch. To review them from this container: `git fetch origin ci-screenshots && git show origin/ci-screenshots:groups-light.png > /tmp/groups-light.png`, then open the PNG. Look at them after any UI change.
+- **Screenshots:** the CI `test` job launches the Debug build with `-TabbitDemo -TabbitScreen <groups|group|swipe|receipt|settle|edit|category|add|mine|sort|map|mappin|mapfix|mapoff|groupmap|profile|profileedit|settings|whatsnew|processing|dialog|work|business|invoices|expenses|job|invoice|workempty|empty>` in light and dark mode. It uploads the `design-screenshots` artifact and force-pushes the PNGs to the **`ci-screenshots`** branch. To review them from this container: `git fetch origin ci-screenshots && git show origin/ci-screenshots:groups-light.png > /tmp/groups-light.png`, then open the PNG. Look at them after any UI change.
 
 ## Storage
 
-- Everything lives only on the phone in `Application Support/Receipts/`: `profile.json` (me), `groups.json` (groups, members, settlements) and `<uuid>/receipt.json` with its photos. The folder is excluded from iCloud Backup (owner's choice: device-only), and files use `.complete` data protection.
+- Everything lives only on the phone in `Application Support/Receipts/`: `profile.json` (me), `groups.json` (groups, members, settlements), `work.json` (businesses with jobs and invoices), `Work/<invoice id>.pdf` (attached invoices) and `<uuid>/receipt.json` with its photos.
+- A receipt is in a group (`groupID`), a business (`businessID`, optionally `jobID`) or My Receipts (neither), never two at once. `receipts(in: nil)` is My Receipts only; the profile's spending uses `personalReceipts` (business expenses are left out). The folder is excluded from iCloud Backup (owner's choice: device-only), and files use `.complete` data protection.
 - It survives closing the app, restarting the phone and re-sideloading updates with the same bundle ID. Deleting the app deletes it.
 - Receipt files carry `schema: 2`. Files without it are v0.4 `SavedReceipt`s; `TabbitStore` migrates them to My Receipts and rewrites them.
 - `ReceiptRecord.parsed` keeps the parser's original output and `scan` the raw OCR, so exports include both `parsed` and the user's `corrected` fields.
@@ -295,6 +307,12 @@ The design is tiered and entirely on-device. Each phone gets the best tier it su
    - A Map tab with a pin for every receipt's store, and a map per group (a trip). Tap a pin for its receipts.
    - Places come from the address printed on the receipt (scanning days later is normal, so not GPS), looked up once with Apple Maps after the person opts in. Receipts without an address, or with one Apple Maps couldn't find, are listed with a field to type it; the editor's Location field is the other place to fix it.
    - MapKit can only be tested on the phone and in the CI screenshots; tests use a stand-in `PlaceSearching`.
-7. **Next:** App Store.
+7. **Done (v1.3):** Work, for freelancers and small businesses.
+   - A Work tab with businesses (or "Freelance" under your own name), each with jobs, invoices and expenses.
+   - The year at a glance: earned (invoices paid that year), invoiced, waiting, overdue, expenses (the business's receipts), profit, and an optional tax set-aside percentage. Jobs show totals for the whole job.
+   - Invoices: type the amount, or attach the invoice (scan, photo or PDF, stored as one PDF); `InvoiceReader` fills in the amount due, number and dates on the device. A check button beside each invoice ticks it off as paid.
+   - Export a year as CSV for an accountant.
+   - Next for Work: mileage and recurring costs, reimbursable expenses, tax-friendly categories, a backup file.
+8. **Next:** App Store.
    - Needs a paid Apple Developer account (signing, TestFlight, App Store Connect); see `docs/AppStore.md`.
    - Real App Store screenshots from a device, a support URL and a privacy policy URL.

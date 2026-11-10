@@ -212,7 +212,7 @@ struct SettingsView: View {
     }
 
     private func exportCSV() {
-        if let url = CSVExporter.write(receipts: store.receipts, groups: store.groups, me: store.me) {
+        if let url = CSVExporter.write(receipts: store.receipts, groups: store.groups, me: store.me, businesses: store.businesses) {
             shareFile = ShareFile(url: url)
         } else {
             store.lastError = "Couldn't create the CSV file."
