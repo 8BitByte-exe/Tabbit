@@ -171,19 +171,22 @@ final class ReceiptFlow: ObservableObject {
         phase = .processing
         let options = OCRSettings.current
         let groupID = targetGroupID
+        // The model starts loading now, while the text is read, so it's ready when needed.
+        let warmup = ReceiptIntelligence.warmUp()
+        let modelPhoto = warmup != nil && ReceiptIntelligence.willSendPhoto
 
         // This Task runs on the main actor (it inherits it from this class).
         // OCR, parsing and photo compression run in a detached task so the UI stays responsive.
         Task {
             do {
                 var processed: ProcessedScan = try await Task.detached(priority: .userInitiated) {
-                    return try ScanProcessor.process(images: images, options: options)
+                    return try await ScanProcessor.process(images: images, options: options, modelPhoto: modelPhoto)
                 }.value
                 // Apple Intelligence (iOS 26, on-device), checked against the scan; keeps
                 // the rules result if it isn't available or doesn't check out.
-                if ReceiptIntelligence.willRun {
+                if warmup != nil {
                     self.isUsingIntelligence = true
-                    processed = await ReceiptIntelligence.refine(processed)
+                    processed = await ReceiptIntelligence.refine(processed, warmup: warmup)
                     self.isUsingIntelligence = false
                 }
                 let record = ScanAutofill.record(from: processed, source: source, groupID: groupID)
@@ -201,6 +204,9 @@ final class ReceiptFlow: ObservableObject {
 
     /// Saves the editor's receipt. Returns an error message, or nil on success.
     func save(_ record: ReceiptRecord, from session: EditorSession) -> String? {
+        // Saving from the editor means the person has looked at the "Check" marks.
+        var record = record
+        record.checks = []
         do {
             if session.isNew {
                 try store.add(record, pageJPEGs: session.pageJPEGs, thumbnailJPEG: session.thumbnailJPEG)

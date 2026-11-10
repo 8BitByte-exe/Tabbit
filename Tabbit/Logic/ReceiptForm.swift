@@ -168,10 +168,12 @@ struct ReceiptForm: Equatable {
         record.total = MoneyInput.parse(totalText)
         record.includeFees = includeFees
 
-        for field in ReceiptForm.changedFields(from: base, to: record) {
+        let changed = ReceiptForm.changedFields(from: base, to: record)
+        for field in changed {
             record.autofilled.remove(field)
             record.unreadable.remove(field)
         }
+        record.checks.removeAll { check in changed.contains(check.field) }
         return record
     }
 

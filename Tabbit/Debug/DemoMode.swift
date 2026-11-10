@@ -203,7 +203,7 @@ enum DemoMode {
     }
 
     /// A freshly scanned receipt, as the editor sees it: filled-in fields are
-    /// marked, the date couldn't be read and one item name is uncertain.
+    /// marked, the date couldn't be read, the category needs a check and one item name is uncertain.
     @MainActor
     private static func scannedSession() -> EditorSession {
         let image = receiptImage(lines: ["MERCADO DA RIBEIRA", "", "SARDINHAS             12.00",
@@ -225,6 +225,8 @@ enum DemoMode {
             source: .camera,
             autofilled: [.merchant, .location, .time, .payment, .category, .total, .tax, .items],
             unreadable: [.date],
+            checks: [FieldCheck(field: .category,
+                                reason: "Apple Intelligence's guess: the store's name doesn't say what it is.")],
             pageImageCount: 1
         )
         return EditorSession(record: record, pageJPEGs: [],

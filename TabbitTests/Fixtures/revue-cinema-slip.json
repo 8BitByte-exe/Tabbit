@@ -1,0 +1,280 @@
+{
+  "appVersion" : "1.2.0",
+  "corrected" : {
+    "date" : {
+      "day" : 26,
+      "month" : 11,
+      "year" : 2008
+    },
+    "lineItems" : [
+      {
+        "amount" : "13.5",
+        "confidence" : 0.94086087,
+        "name" : "Amount"
+      }
+    ],
+    "location" : "400 Roncesvalles Avenue, Toronto, ON M6R 2M9",
+    "merchant" : "Revue Cinerna",
+    "notes" : [
+      "Read with Apple Intelligence on this iPhone. Every amount comes from the scan, but they don't all add up, so check them."
+    ],
+    "parser" : "appleIntelligence",
+    "paymentMethod" : "Visa",
+    "subtotal" : "13.5",
+    "time" : {
+      "hour" : 15,
+      "minute" : 30
+    },
+    "total" : "13.5"
+  },
+  "exportedAt" : "2026-11-10T00:49:19Z",
+  "format" : "tabbit-scan",
+  "languageCorrection" : false,
+  "parsed" : {
+    "date" : {
+      "day" : 26,
+      "month" : 11,
+      "year" : 2008
+    },
+    "intelligence" : {
+      "category" : "transport",
+      "date" : "2008-11-26",
+      "labels" : [
+        "[1] item: Amount: $13.50",
+        "[2] discount: ?",
+        "[3] subtotal: ?",
+        "[4] tax: ?",
+        "[5] taxTotal: ?",
+        "[6] tip: ?",
+        "[7] total: ?",
+        "[8] payment: ?",
+        "[9] savings: ?",
+        "[10] unitPrice: ?",
+        "[11] other: ?"
+      ],
+      "outcome" : "used",
+      "photo" : "off",
+      "pricesIncludeTax" : false,
+      "readSeconds" : 0.21988201141357422,
+      "reader" : "documents",
+      "seconds" : 6.117053031921387,
+      "storeName" : "Revue Cinerna"
+    },
+    "lineItems" : [
+      {
+        "amount" : "13.5",
+        "confidence" : 0.94086087,
+        "name" : "Amount"
+      }
+    ],
+    "location" : "400 Roncesvalles Avenue, Toronto, ON M6R 2M9",
+    "merchant" : "Revue Cinerna",
+    "notes" : [
+      "Read with Apple Intelligence on this iPhone. Every amount comes from the scan, but they don't all add up, so check them."
+    ],
+    "parser" : "appleIntelligence",
+    "paymentMethod" : "Visa",
+    "time" : {
+      "hour" : 15,
+      "minute" : 30
+    }
+  },
+  "redacted" : true,
+  "scan" : {
+    "blocks" : [
+      {
+        "confidence" : 0.973,
+        "height" : 0.0639,
+        "page" : 0,
+        "text" : "TRANSACTION RECORD",
+        "width" : 0.5562,
+        "x" : 0.0862,
+        "y" : 0.8567
+      },
+      {
+        "confidence" : 0.879,
+        "height" : 0.0483,
+        "page" : 0,
+        "text" : "Revue Cinerna",
+        "width" : 0.3406,
+        "x" : 0.087,
+        "y" : 0.8349
+      },
+      {
+        "confidence" : 0.945,
+        "height" : 0.0656,
+        "page" : 0,
+        "text" : "400 Roncesvalles Avenue",
+        "width" : 0.5421,
+        "x" : 0.0862,
+        "y" : 0.7843
+      },
+      {
+        "confidence" : 0.917,
+        "height" : 0.0654,
+        "page" : 0,
+        "text" : "Toronto, ON M6R 2M9",
+        "width" : 0.4819,
+        "x" : 0.0851,
+        "y" : 0.749
+      },
+      {
+        "confidence" : 0.934,
+        "height" : 0.0436,
+        "page" : 0,
+        "text" : "Type: Purchase",
+        "width" : 0.316,
+        "x" : 0.0869,
+        "y" : 0.6949
+      },
+      {
+        "confidence" : 0.924,
+        "height" : 0.0405,
+        "page" : 0,
+        "text" : "Account: Visa",
+        "width" : 0.2875,
+        "x" : 0.0871,
+        "y" : 0.6676
+      },
+      {
+        "confidence" : 0.941,
+        "height" : 0.0438,
+        "page" : 0,
+        "text" : "Amount: $13.50",
+        "width" : 0.325,
+        "x" : 0.0872,
+        "y" : 0.6346
+      },
+      {
+        "confidence" : 0.92,
+        "height" : 0.0471,
+        "page" : 0,
+        "text" : "Cardl Num: ************####",
+        "width" : 0.5293,
+        "x" : 0.0878,
+        "y" : 0.571
+      },
+      {
+        "confidence" : 0.953,
+        "height" : 0.048,
+        "page" : 0,
+        "text" : "Date\/Time: 26-11-08 15:30:14",
+        "width" : 0.5737,
+        "x" : 0.0881,
+        "y" : 0.5405
+      },
+      {
+        "confidence" : 0.922,
+        "height" : 0.0482,
+        "page" : 0,
+        "text" : "Ref Num: P################# H",
+        "width" : 0.6736,
+        "x" : 0.0883,
+        "y" : 0.5109
+      },
+      {
+        "confidence" : 0.895,
+        "height" : 0.0406,
+        "page" : 0,
+        "text" : "Auth Code: ######",
+        "width" : 0.3791,
+        "x" : 0.0878,
+        "y" : 0.4894
+      },
+      {
+        "confidence" : 0.911,
+        "height" : 0.0435,
+        "page" : 0,
+        "text" : "RoptID: ######## - ########",
+        "width" : 0.5832,
+        "x" : 0.0884,
+        "y" : 0.4559
+      },
+      {
+        "confidence" : 0.94,
+        "height" : 0.0374,
+        "page" : 0,
+        "text" : "OID: ########",
+        "width" : 0.316,
+        "x" : 0.0851,
+        "y" : 0.4344
+      },
+      {
+        "confidence" : 0.891,
+        "height" : 0.0346,
+        "page" : 0,
+        "text" : "App Label: Visa CREDIT",
+        "width" : 0.488,
+        "x" : 0.0858,
+        "y" : 0.372
+      },
+      {
+        "confidence" : 0.956,
+        "height" : 0.0344,
+        "page" : 0,
+        "text" : "EMV AID: A#############",
+        "width" : 0.5508,
+        "x" : 0.0858,
+        "y" : 0.3431
+      },
+      {
+        "confidence" : 0.953,
+        "height" : 0.0366,
+        "page" : 0,
+        "text" : "ARQC: E9421C110D7D82E2",
+        "width" : 0.5752,
+        "x" : 0.0857,
+        "y" : 0.3118
+      },
+      {
+        "confidence" : 0.841,
+        "height" : 0.0253,
+        "page" : 0,
+        "text" : "FF\/DT 23",
+        "width" : 0.1911,
+        "x" : 0.0833,
+        "y" : 0.2623
+      },
+      {
+        "confidence" : 0.933,
+        "height" : 0.0323,
+        "page" : 0,
+        "text" : "No Signature Transaction",
+        "width" : 0.4941,
+        "x" : 0.0829,
+        "y" : 0.2221
+      },
+      {
+        "confidence" : 0.898,
+        "height" : 0.0363,
+        "page" : 0,
+        "text" : "01 APPROVED - THANK YOU 027",
+        "width" : 0.6856,
+        "x" : 0.1555,
+        "y" : 0.1595
+      },
+      {
+        "confidence" : 0.897,
+        "height" : 0.0336,
+        "page" : 0,
+        "text" : "IMPORTANT - retain this copy for your recoras",
+        "width" : 0.9069,
+        "x" : 0.0794,
+        "y" : 0.0982
+      },
+      {
+        "confidence" : 0.899,
+        "height" : 0.0292,
+        "page" : 0,
+        "text" : "*** Merchant Copy ***",
+        "width" : 0.4271,
+        "x" : 0.2326,
+        "y" : 0.0438
+      }
+    ],
+    "pageCount" : 1,
+    "reader" : "documents",
+    "seconds" : 0.21988201141357422
+  },
+  "version" : 1
+}

@@ -20,6 +20,10 @@ import Foundation
 /// and total, tax and payment words in German, Spanish, French, Italian and Dutch.
 struct RulesReceiptParser {
 
+    /// When the receipt was scanned. Dates whose digits can be read several ways are read
+    /// as the one close to this ("26-11-08" scanned in 2026 is November 8, 2026).
+    var referenceDate: Date = Date()
+
     func parse(_ scan: ScanResult) -> Receipt {
         // Try each tilt guess (usually just one) and keep the result whose
         // numbers agree best. Ties keep the earlier, geometrically better guess.
@@ -157,16 +161,27 @@ struct RulesReceiptParser {
         }
 
         let counted = candidates.filter { candidate in candidate.included }
+        notes.append(contentsOf: RulesReceiptParser.repairNotes(in: lines))
         let computed = counted.filter { candidate in candidate.isComputed }
         if computed.count == 1, let line = computed.first {
             notes.append("Worked out the price of \"\(line.label)\" from its quantity and unit price.")
         } else if computed.count > 1 {
             notes.append("Worked out \(computed.count) prices from their quantity and unit price.")
         }
-        let items = counted.map { candidate in candidate.item }
+        var items = counted.map { candidate in candidate.item }
+        if total == nil && subtotal == nil && tax == nil && tip == nil,
+           let only = RulesReceiptParser.singleAmountTotal(of: items) {
+            total = only
+            if RulesReceiptParser.isPaymentSlip(items) {
+                items = []
+                notes.append(RulesReceiptParser.paymentSlipNote)
+            } else {
+                notes.append(RulesReceiptParser.singleAmountNote)
+            }
+        }
         let merchant = RulesReceiptParser.findMerchant(in: lines)
         let texts = lines.map { line in line.text }
-        let date = ReceiptDateParser.firstDate(in: texts)
+        let date = ReceiptDateParser.firstDate(in: texts, reference: referenceDate)
 
         return Receipt(
             merchant: merchant,
@@ -185,22 +200,150 @@ struct RulesReceiptParser {
         )
     }
 
+    /// A card slip or ticket that prints one amount ("Amount: $13.50") and no subtotal, tax or
+    /// total: that amount is what was paid. Nil unless there's exactly one positive item.
+    static func singleAmountTotal(of items: [ReceiptLineItem]) -> Decimal? {
+        guard items.count == 1, let amount = items.first?.amount, amount > 0 else {
+            return nil
+        }
+        return amount
+    }
+
+    static let singleAmountNote = "Only one amount is printed, so it's the total."
+    static let paymentSlipNote = "This is a payment slip without a list of items, so only the total is filled in."
+
+    /// Words that name a payment rather than a product ("Amount: $13.50", "PURCHASE 13.50").
+    static let transactionWords: Set<String> = [
+        "AMOUNT", "AMT", "PURCHASE", "SALE", "PAYMENT", "PAID", "CHARGE", "CHARGED", "TRANSACTION", "TOTAL",
+        "TYPE", "USD", "CAD", "EUR", "GBP", "BETRAG", "IMPORTE", "MONTANT", "IMPORTO", "BEDRAG",
+    ]
+
+    /// True if the only "item" is a payment line: a card slip or stub, not an itemized receipt.
+    static func isPaymentSlip(_ items: [ReceiptLineItem]) -> Bool {
+        guard items.count == 1, let name = items.first?.name else {
+            return false
+        }
+        let words = ReceiptKeywords.words(in: name.uppercased()).filter { word in
+            word.rangeOfCharacter(from: .letters) != nil
+        }
+        return !words.isEmpty && words.allSatisfy { word in transactionWords.contains(word) }
+    }
+
     // MARK: - Lines
 
     /// The receipt's lines with their roles, amounts and where the amounts sit.
     static func analyze(_ textLines: [TextLine]) -> [AnalyzedLine] {
         var lines = textLines.map { line in AnalyzedLine(line) }
+        markPriceColumn(&lines, textLines)
+        if repairDamagedPrices(&lines) {
+            markPriceColumn(&lines, textLines)
+        }
+        return lines
+    }
+
+    private static func markPriceColumn(_ lines: inout [AnalyzedLine], _ textLines: [TextLine]) {
         let columns = ReceiptLayout.inPriceColumn(textLines, hasAmount: lines.map { line in line.amount != nil })
         for index in lines.indices where index < columns.count {
             lines[index].inPriceColumn = columns[index]
         }
-        return lines
+    }
+
+    /// Notes about item prices that were partly unreadable start with this.
+    static let repairedPricePrefix = "Part of a price was unreadable"
+
+    /// Item prices whose last digits OCR garbled ("$24.9îŚ"). With one such price among the
+    /// items, the receipt's own arithmetic says what it is: the subtotal (or the total less
+    /// tax) minus the other prices, if that fits the digits that could be read (24.90–24.99).
+    /// Otherwise a reading by shape is used ("$4.9S" is 4.95), and failing that the line keeps
+    /// no amount. Returns true if any price was filled in.
+    private static func repairDamagedPrices(_ lines: inout [AnalyzedLine]) -> Bool {
+        let summaryIndex = lines.firstIndex(where: { line in
+            ReceiptLineRole.summaryRoles.contains(line.role) && line.amount != nil
+        }) ?? lines.count
+        let damaged = (0..<summaryIndex).filter { index in lines[index].damaged != nil }
+        guard !damaged.isEmpty else {
+            return false
+        }
+
+        // What the items should add up to.
+        var target: Decimal?
+        let summary = Array(lines[summaryIndex...])
+        if let subtotal = firstAmount(in: summary, role: .subtotal) {
+            target = subtotal
+        } else if let totalLine = summary.first(where: { line in
+            (line.role == .total || line.role == .strongTotal) && line.amount != nil
+        }), let total = totalLine.amount?.value {
+            let tax = firstAmount(in: summary, role: .tax) ?? firstAmount(in: summary, role: .taxTotal) ?? Decimal(0)
+            target = total - tax
+        }
+
+        // The other prices: named lines and money off in the price column.
+        var others = Decimal(0)
+        for index in 0..<summaryIndex where lines[index].damaged == nil && lines[index].inPriceColumn {
+            let line = lines[index]
+            guard let amount = line.amount?.value else {
+                continue
+            }
+            if line.role == .discount {
+                others -= amount < 0 ? -amount : amount
+            } else if line.role == .other {
+                others += amount
+            }
+        }
+
+        var unresolved = damaged
+        if damaged.count > 1 {
+            for index in damaged {
+                guard let found = lines[index].damaged, let value = found.lookAlike else {
+                    continue
+                }
+                fill(&lines[index], value: value, worked: false)
+                others += value
+                unresolved.removeAll { other in other == index }
+            }
+        }
+        for index in unresolved {
+            guard let found = lines[index].damaged else {
+                continue
+            }
+            if unresolved.count == 1, let target = target {
+                let missing = target - others
+                if missing >= found.low && missing <= found.high {
+                    fill(&lines[index], value: missing, worked: true)
+                    continue
+                }
+            }
+            if let value = found.lookAlike {
+                fill(&lines[index], value: value, worked: false)
+            }
+        }
+        return damaged.contains { index in lines[index].amount != nil }
+    }
+
+    private static func fill(_ line: inout AnalyzedLine, value: Decimal, worked: Bool) {
+        guard let found = line.damaged else {
+            return
+        }
+        line.amount = AmountParser.ParsedAmount(value: value, textBefore: found.textBefore)
+        let name = found.textBefore.isEmpty ? "a line" : "\"\(found.textBefore)\""
+        let how = worked ? "worked out as \(MoneyInput.editText(value)) from the other amounts"
+            : "read as \(MoneyInput.editText(value))"
+        line.repairNote = "\(repairedPricePrefix): \(name) shows “\(found.printed)”, so its price was \(how)."
+    }
+
+    /// The notes for prices that were partly unreadable, top to bottom.
+    static func repairNotes(in lines: [AnalyzedLine]) -> [String] {
+        return lines.compactMap { line in line.repairNote }
     }
 
     struct AnalyzedLine {
         let text: String
         let pageIndex: Int
-        let amount: AmountParser.ParsedAmount?
+        var amount: AmountParser.ParsedAmount?
+        /// A price whose last digits OCR couldn't read ("$24.9îŚ"); `analyze` may fill in `amount`.
+        var damaged: AmountParser.DamagedAmount?
+        /// Says how a partly unreadable price was filled in.
+        var repairNote: String?
         /// Quantity, unit price and a second reading of the amount, for lines that may be items.
         let detail: LineAmount?
         let role: ReceiptLineRole
@@ -237,7 +380,11 @@ struct RulesReceiptParser {
                 self.amount = AmountParser.ParsedAmount(value: detail.value, textBefore: detail.textBefore)
             } else {
                 self.detail = nil
-                self.amount = AmountParser.trailingAmount(in: line.text)
+                let trailing = AmountParser.trailingAmount(in: line.text)
+                self.amount = trailing
+                if trailing == nil && RulesReceiptParser.itemRoles.contains(role) && role != .info {
+                    self.damaged = AmountParser.damagedAmount(in: line.text)
+                }
             }
 
             let confidences = line.blocks.map { block in block.confidence }

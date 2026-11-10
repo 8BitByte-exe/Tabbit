@@ -1,4 +1,8 @@
 import Foundation
+import UIKit
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 /// Whether Apple Intelligence can read receipts on this iPhone.
 enum IntelligenceStatus: Equatable {
@@ -49,10 +53,16 @@ enum ReceiptIntelligence {
 
     /// Settings toggle (on by default).
     static let enabledKey = "appleIntelligence.enabled"
+    /// Settings toggle for showing the model the receipt's photo (iOS 27, on by default).
+    static let photoKey = "appleIntelligence.photo"
 
     /// Give up and keep the rules result after this long (seconds). The model writes one
     /// short label per amount line, which takes a while on a long receipt.
     static let timeout: Double = 45
+    /// The most the reading with the photo may take (seconds). After that the photo is
+    /// dropped and the text alone gets the rest of `timeout`, so a slow photo never costs
+    /// the whole reading.
+    static let photoTimeout: Double = 20
 
     static var isEnabled: Bool {
         return UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
@@ -72,8 +82,40 @@ enum ReceiptIntelligence {
         return isEnabled && status == .available
     }
 
+    /// True if this iPhone's model can look at photos (iOS 27).
+    static var canSeePhotos: Bool {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            return AppleIntelligenceReader.canSeePhotos
+        }
+        #endif
+        return false
+    }
+
+    /// True if the next scan's photo will be shown to the model with the text.
+    static var willSendPhoto: Bool {
+        let photoOn = UserDefaults.standard.object(forKey: photoKey) as? Bool ?? true
+        return willRun && photoOn && canSeePhotos
+    }
+
+    /// Starts loading the model into memory, so it's ready by the time the scan has been read.
+    /// Call it when a scan starts; pass the result to `refine`. Nil if the model won't run.
+    static func warmUp() -> IntelligenceWarmup? {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            guard willRun else {
+                return nil
+            }
+            let session = AppleIntelligenceReader.makeSession()
+            session.prewarm()
+            return IntelligenceWarmup(session: session)
+        }
+        #endif
+        return nil
+    }
+
     /// The scan with the model's reading, or unchanged if the model can't help.
-    static func refine(_ processed: ProcessedScan) async -> ProcessedScan {
+    static func refine(_ processed: ProcessedScan, warmup: IntelligenceWarmup? = nil) async -> ProcessedScan {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             guard willRun else {
@@ -82,27 +124,57 @@ enum ReceiptIntelligence {
             let slopeChoice = RulesReceiptParser.bestSlopeChoice(for: processed.scan)
             var budget = ReceiptPrompt.maxCharacters
             var result = processed
+            var photo = processed.modelPhoto
+            var photoNote = canSeePhotos ? (willSendPhoto ? "no text found to crop" : "off") : "needs iOS 27"
+            if let image = photo {
+                photoNote = "\(Int(image.size.width))×\(Int(image.size.height)), \(processed.modelPhotoColumns) section(s)"
+            }
             let started = Date()
             while true {
                 let numbered = NumberedReceipt(scan: processed.scan, slopeChoice: slopeChoice, maxCharacters: budget)
-                let prompt = ReceiptPrompt.make(for: numbered)
+                let columns = photo == nil ? 0 : processed.modelPhotoColumns
+                let prompt = ReceiptPrompt.make(for: numbered, photoSections: columns)
                 guard !prompt.isEmpty else {
                     // Nothing with an amount on it: the rules result stands.
                     return processed
                 }
-                let remaining = timeout - Date().timeIntervalSince(started)
+                var remaining = timeout - Date().timeIntervalSince(started)
+                if photo != nil {
+                    remaining = min(remaining, photoTimeout)
+                }
+                let attemptStarted = Date()
+                let warmSession = warmup?.take() as? LanguageModelSession
+                let request = ModelRequest(prompt: prompt, lineCount: numbered.entries.count, photo: photo,
+                                           session: warmSession)
                 do {
                     let reading = try await withTimeout(seconds: max(remaining, 1)) {
-                        try await AppleIntelligenceReader.read(prompt: prompt)
+                        try await request.run()
                     }
                     let outcome = ModelReceiptVerifier.evaluate(reading, numbered: numbered, rules: processed.receipt)
                     result.receipt = outcome.receipt
                     result.suggestedCategory = outcome.suggestedCategory
-                    result.receipt.intelligence = ModelReceiptVerifier.trace(
+                    var trace = ModelReceiptVerifier.trace(
                         of: reading, numbered: numbered, outcome: outcome,
                         seconds: Date().timeIntervalSince(started))
+                    trace.photo = photo == nil ? photoNote
+                        : photoNote + String(format: ", %.1f s", Date().timeIntervalSince(attemptStarted))
+                    trace.reader = processed.scan.reader
+                    trace.readSeconds = processed.scan.seconds
+                    result.receipt.intelligence = trace
                     return result
                 } catch {
+                    // The photo didn't work (too slow, too big for the context, or not
+                    // supported): the text alone, right away, with the time that's left.
+                    if photo != nil && !AppleIntelligenceReader.isGuardrail(error) {
+                        photo = nil
+                        let seconds = String(format: "%.1f s", Date().timeIntervalSince(attemptStarted))
+                        if error is TimedOut {
+                            photoNote += ", too slow (\(seconds)), read without it"
+                        } else {
+                            photoNote += ", failed after \(seconds), read without it: \(String(describing: error).prefix(120))"
+                        }
+                        continue
+                    }
                     // A receipt too long for the model's context: try again with less of it.
                     if AppleIntelligenceReader.isTooLong(error) && budget > 1_200 {
                         budget = budget * 6 / 10
@@ -117,7 +189,10 @@ enum ReceiptIntelligence {
                     result.receipt.notes.append(note)
                     result.receipt.intelligence = IntelligenceTrace(
                         outcome: "error: \(String(describing: error))",
-                        seconds: Date().timeIntervalSince(started))
+                        seconds: Date().timeIntervalSince(started),
+                        photo: photoNote,
+                        reader: processed.scan.reader,
+                        readSeconds: processed.scan.seconds)
                     return result
                 }
             }
@@ -147,5 +222,29 @@ enum ReceiptIntelligence {
             }
             return first
         }
+    }
+}
+
+/// A model session that started loading while the scan was being read. Used once.
+final class IntelligenceWarmup: @unchecked Sendable {
+    private let session: AnyObject
+    private let lock = NSLock()
+    private var isTaken = false
+
+    init(session: AnyObject) {
+        self.session = session
+    }
+
+    /// The session the first time, nil after that (a session reads one receipt).
+    func take() -> AnyObject? {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        if isTaken {
+            return nil
+        }
+        isTaken = true
+        return session
     }
 }

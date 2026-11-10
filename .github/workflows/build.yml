@@ -16,12 +16,24 @@ concurrency:
 jobs:
   build:
     name: Build unsigned IPA
-    runs-on: macos-latest
+    # GitHub's Xcode 27 image: the iOS 27 SDK, so the IPA includes Apple Intelligence's
+    # photo reading. The test job stays on macos-latest for its simulators.
+    runs-on: xcode-27
     timeout-minutes: 30
 
     steps:
       - name: Check out
         uses: actions/checkout@v7
+
+      # The newest non-beta Xcode on the runner. The code still builds with older SDKs
+      # (#if compiler(>=6.4)), just without the photo reading.
+      - name: Use the newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -E '/Xcode_[0-9.]+\.app$' | sort -V | tail -1)
+          if [ -n "$NEWEST" ]; then
+            sudo xcode-select -s "$NEWEST/Contents/Developer"
+          fi
 
       - name: Show Xcode version
         run: xcodebuild -version

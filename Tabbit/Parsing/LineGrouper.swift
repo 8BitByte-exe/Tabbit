@@ -24,6 +24,10 @@ struct TextLine: Equatable {
 /// 3. A line that is only a price joins the nearest line above or below that
 ///    has a name but no price.
 ///
+/// On iOS 26 the document reader often says which blocks were printed on one row
+/// (`RecognizedTextBlock.row`). That beats geometry: blocks of the same row join each
+/// other up to 1.5 text heights apart, and a lone price joins the line of its row.
+///
 /// When a page is tilted by more than about half a line spacing, the geometry is
 /// ambiguous: prices line up equally well with their own names or with the names
 /// one line up. So up to 3 tilt guesses are offered (`slopeChoice`), best first,
@@ -33,12 +37,26 @@ enum LineGrouper {
     /// All lines of the scan: page by page, top to bottom.
     /// `slopeChoice` picks which tilt guess to use on each page (0 = best).
     static func lines(from scan: ScanResult, slopeChoice: Int = 0) -> [TextLine] {
+        // Characters OCR took from the wrong alphabet are read as the receipt's own first.
+        let alphabet = ReceiptAlphabet(texts: scan.blocks.map { block in block.text })
         var result: [TextLine] = []
         for pageIndex in 0..<max(scan.pageCount, 0) {
-            let pageLines = lines(from: scan.blocks(onPage: pageIndex), pageIndex: pageIndex, slopeChoice: slopeChoice)
+            let blocks = scan.blocks(onPage: pageIndex).map { block in normalized(block, alphabet: alphabet) }
+            let pageLines = lines(from: blocks, pageIndex: pageIndex, slopeChoice: slopeChoice)
             result.append(contentsOf: pageLines)
         }
         return result
+    }
+
+    /// The block with its text (and other readings) in the receipt's alphabet.
+    static func normalized(_ block: RecognizedTextBlock, alphabet: ReceiptAlphabet) -> RecognizedTextBlock {
+        let text = alphabet.normalized(block.text)
+        let alternatives = block.alternatives.map { alternative in alphabet.normalized(alternative) }
+        if text == block.text && alternatives == block.alternatives {
+            return block
+        }
+        return RecognizedTextBlock(text: text, confidence: block.confidence, boundingBox: block.boundingBox,
+                                   pageIndex: block.pageIndex, alternatives: alternatives, row: block.row)
     }
 
     /// How many tilt guesses are worth trying for this scan (1 to 3).
@@ -153,8 +171,25 @@ enum LineGrouper {
 
     // MARK: - Grouping
 
-    /// The row whose center is within half a text height of the block's center.
+    /// The row whose center is within half a text height of the block's center. A row that
+    /// has a block from the same document row (iOS 26) may be up to 1.5 text heights away,
+    /// and wins over geometry.
     private static func closestRow(for item: PlacedBlock, in rows: [[PlacedBlock]]) -> Int? {
+        if let documentRow = item.block.row {
+            var bestIndex: Int?
+            var bestDistance = CGFloat.greatestFiniteMagnitude
+            for (index, row) in rows.enumerated() where row.contains(where: { other in other.block.row == documentRow }) {
+                let tolerance = max(1.5 * min(averageHeight(row), item.block.boundingBox.height), 0.004)
+                let distance = abs(averageY(row) - item.y)
+                if distance <= tolerance && distance < bestDistance && !overlapsHorizontally(item, row) {
+                    bestIndex = index
+                    bestDistance = distance
+                }
+            }
+            if let bestIndex = bestIndex {
+                return bestIndex
+            }
+        }
         var bestIndex: Int?
         var bestDistance = CGFloat.greatestFiniteMagnitude
         for (index, row) in rows.enumerated() {
@@ -168,9 +203,21 @@ enum LineGrouper {
         return bestIndex
     }
 
+    /// True if the block overlaps a block of the row from left to right: two pieces of text
+    /// printed in the same place are on different lines.
+    private static func overlapsHorizontally(_ item: PlacedBlock, _ row: [PlacedBlock]) -> Bool {
+        let box = item.block.boundingBox
+        return row.contains { other in
+            let otherBox = other.block.boundingBox
+            let overlap = min(box.maxX, otherBox.maxX) - max(box.minX, otherBox.minX)
+            return overlap > 0.3 * min(box.width, otherBox.width)
+        }
+    }
+
     /// Moves rows that are only a price (like "4.99" or "4.99 F") onto the nearest
     /// neighboring row that has a name but no price. Within 1.6 text heights;
-    /// on a near tie the row above wins.
+    /// on a near tie the row above wins. When the document reader put the price and a
+    /// neighbor in the same row, that neighbor wins (within 2.5 text heights).
     private static func attachLonePrices(in rows: [[PlacedBlock]]) -> [[PlacedBlock]] {
         var rows = rows
         var index = 0
@@ -183,6 +230,7 @@ enum LineGrouper {
             let height = averageHeight(rows[index])
             var target: Int?
             var bestScore = CGFloat.greatestFiniteMagnitude
+            let documentRows = Set(rows[index].compactMap { item in item.block.row })
             for candidate in [index - 1, index + 1] where candidate >= 0 && candidate < rows.count {
                 let text = rowText(rows[candidate])
                 // A department heading ("PRODUCE") is never the name a stray price belongs to.
@@ -191,10 +239,19 @@ enum LineGrouper {
                     continue
                 }
                 let distance = abs(averageY(rows[candidate]) - y)
-                guard distance <= 1.6 * height else {
+                let sameDocumentRow = rows[candidate].contains { item in
+                    guard let row = item.block.row else {
+                        return false
+                    }
+                    return documentRows.contains(row)
+                }
+                guard distance <= (sameDocumentRow ? 2.5 : 1.6) * height else {
                     continue
                 }
-                let score = candidate < index ? distance - 0.2 * height : distance
+                var score = candidate < index ? distance - 0.2 * height : distance
+                if sameDocumentRow {
+                    score -= 10
+                }
                 if score < bestScore {
                     bestScore = score
                     target = candidate

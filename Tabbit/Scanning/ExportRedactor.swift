@@ -32,10 +32,11 @@ enum ExportRedactor {
                 confidence: block.confidence,
                 boundingBox: block.boundingBox,
                 pageIndex: block.pageIndex,
-                alternatives: block.alternatives.map { alternative in redact(alternative) }
+                alternatives: block.alternatives.map { alternative in redact(alternative) },
+                row: block.row
             )
         }
-        return ScanResult(pageCount: scan.pageCount, blocks: blocks)
+        return ScanResult(pageCount: scan.pageCount, blocks: blocks, reader: scan.reader, seconds: scan.seconds)
     }
 
     static func redact(_ text: String) -> String {

@@ -40,6 +40,8 @@ struct ModelReceiptReading: Equatable {
     var category: String
     /// "YYYY-MM-DD", or empty.
     var date: String
+    /// False when the model says the receipt lists no products (a card slip or stub).
+    var isItemized: Bool = true
 }
 
 /// The result of reading a scan with Apple Intelligence.
@@ -99,6 +101,15 @@ struct ScanEvidence {
 
     private func contains(_ word: String) -> Bool {
         if words.contains(word) {
+            return true
+        }
+        guard word.count >= 4 else {
+            return false
+        }
+        // A word the scan misread by look-alike letters ("Cinerna" for "Cinema") counts.
+        if words.contains(where: { printed in
+            abs(printed.count - word.count) <= 2 && OCRSpelling.distance(printed, word) <= 2 * OCRSpelling.lookAlikeCost + 0.01
+        }) {
             return true
         }
         guard word.count >= 5 else {
@@ -399,6 +410,19 @@ enum ModelReceiptVerifier {
             parser: .appleIntelligence,
             notes: []
         )
+        if receipt.total == nil && receipt.subtotal == nil && receipt.tax == nil && receipt.tip == nil,
+           let only = RulesReceiptParser.singleAmountTotal(of: items) {
+            receipt.total = only
+            // A card slip or stub: the model says the receipt lists no products, or the only
+            // "item" is a payment line ("Amount: $13.50").
+            if !reading.isItemized || RulesReceiptParser.isPaymentSlip(items) {
+                receipt.lineItems = []
+                notes.append(RulesReceiptParser.paymentSlipNote)
+            } else {
+                notes.append(RulesReceiptParser.singleAmountNote)
+            }
+        }
+        notes.append(contentsOf: numbered.repairNotes)
         let addsUp = !ReceiptValidator.checks(for: receipt).contains(where: { check in !check.passed })
             && receipt.total != nil
         receipt.notes = [addsUp ? usedNote : usedUncheckedNote] + notes
@@ -687,6 +711,7 @@ enum ModelReceiptVerifier {
             category: reading.category,
             date: reading.date,
             pricesIncludeTax: reading.pricesIncludeTax,
+            isItemized: reading.isItemized,
             labels: labels
         )
     }

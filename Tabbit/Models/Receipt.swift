@@ -104,8 +104,15 @@ struct IntelligenceTrace: Equatable, Codable {
     var category: String?
     var date: String?
     var pricesIncludeTax: Bool?
+    /// False when the model said the receipt lists no products (a card slip).
+    var isItemized: Bool? = nil
     /// One per labelled line: "[3] item: Organic bananas".
     var labels: [String] = []
+    /// The photo the model saw ("896×640, 2 section(s)"), "off", or why it couldn't use it.
+    var photo: String? = nil
+    /// Which reader read the text ("documents" or "text") and how long it took (seconds).
+    var reader: String? = nil
+    var readSeconds: Double? = nil
 }
 
 /// The structured result of parsing one scanned receipt.

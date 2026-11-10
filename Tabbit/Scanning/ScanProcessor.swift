@@ -14,6 +14,11 @@ struct ProcessedScan {
     let languageCorrection: Bool
     /// Apple Intelligence's guess at the category, if it read the receipt.
     var suggestedCategory: SpendCategory? = nil
+    /// The receipt cut into sections side by side for Apple Intelligence (iOS 27), when it
+    /// will look at the photo. Never saved.
+    var modelPhoto: UIImage? = nil
+    /// How many sections `modelPhoto` has.
+    var modelPhotoColumns: Int = 0
 }
 
 /// Runs OCR, parsing and photo compression for one scan. Everything happens on the device.
@@ -21,18 +26,35 @@ struct ProcessedScan {
 /// Synchronous and can take a moment per page, so call it off the main thread.
 enum ScanProcessor {
 
-    static func process(images: [UIImage], options: RecognitionOptions) throws -> ProcessedScan {
-        let scan = try TextRecognizer.recognizeText(in: images, options: options)
+    /// Reads the text of every page while the photos are compressed, then parses it.
+    /// `modelPhoto` also prepares the picture Apple Intelligence will look at.
+    static func process(images: [UIImage], options: RecognitionOptions, modelPhoto: Bool = false) async throws -> ProcessedScan {
+        // Compressing the photos doesn't need the text, so it runs alongside the reading.
+        async let pages = compressPages(images)
+        async let thumbnail = compressThumbnail(images)
+        let scan = try await TextRecognizer.read(images, options: options)
         let receipt = RulesReceiptParser().parse(scan)
-        let pages = images.compactMap { image in jpegData(for: image, maxDimension: 2000, quality: 0.7) }
-        let thumbnail = images.first.flatMap { image in jpegData(for: image, maxDimension: 320, quality: 0.75) }
+        var photo: (image: UIImage, columns: Int)?
+        if modelPhoto {
+            photo = ReceiptPhoto.make(images: images, scan: scan)
+        }
         return ProcessedScan(
             scan: scan,
             receipt: receipt,
-            pageJPEGs: pages,
-            thumbnailJPEG: thumbnail,
-            languageCorrection: options.languageCorrection
+            pageJPEGs: await pages,
+            thumbnailJPEG: await thumbnail,
+            languageCorrection: options.languageCorrection,
+            modelPhoto: photo?.image,
+            modelPhotoColumns: photo?.columns ?? 0
         )
+    }
+
+    private static func compressPages(_ images: [UIImage]) -> [Data] {
+        return images.compactMap { image in jpegData(for: image, maxDimension: 2000, quality: 0.7) }
+    }
+
+    private static func compressThumbnail(_ images: [UIImage]) -> Data? {
+        return images.first.flatMap { image in jpegData(for: image, maxDimension: 320, quality: 0.75) }
     }
 
     /// The image scaled down to `maxDimension` on its long side, as JPEG.

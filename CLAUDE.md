@@ -22,7 +22,7 @@ The owner has no Mac and no Xcode. **The GitHub Actions macOS runner is the only
 Scanning, OCR, parsing, splitting and storage must run on the iPhone.
 
 - No networking code: no `URLSession`, no web APIs, no analytics, no third-party SDKs.
-- Use only on-device Apple frameworks: VisionKit, Vision, PhotosUI, Photos (save only), Charts, Foundation, Foundation Models, and MapKit for the opt-in map.
+- Use only on-device Apple frameworks: VisionKit, Vision, PhotosUI, Photos (save only), Charts, Foundation, Foundation Models, NaturalLanguage (language detection), and MapKit for the opt-in map.
 - The only way data leaves the phone is when the user explicitly shares something: Settle Up Copy/Send, CSV export, Save to Photos, Export Scan Data.
 - **The one exception is the map, and it's opt-in** (owner's choice, v1.2). It's off until the person turns it on, on the Map tab or in Settings (`MapSettings.enabledKey`). Then MapKit's `MKLocalSearch` receives each receipt's store name and printed address, once (`PlaceQuery`), and MapKit loads the map tiles. Nothing else is sent: no items, amounts, people or photos. While it's off, no `Map` view is drawn and nothing is looked up. Found places are stored with the receipt (`ReceiptRecord.place`), so each address is looked up only once.
 - `Tabbit/Resources/PrivacyInfo.xcprivacy` declares no tracking and no collected data, plus the required-reason APIs (UserDefaults CA92.1, disk space 85F4.1). Update it if the app ever touches another required-reason API.
@@ -78,10 +78,14 @@ Tabbit/
                              (no address / waiting / found / not found), pins (one per spot)
     AppInfo.swift            Changelog (What's New), StorageUsage
   Intelligence/              Apple Intelligence (roadmap tier 1), all on-device
-    ReceiptIntelligence.swift  status (IntelligenceStatus), Settings toggle, refine(ProcessedScan),
-                               timeout, retry with a shorter prompt, IntelligenceTrace
+    ReceiptIntelligence.swift  status (IntelligenceStatus), Settings toggles (on, photo), warmUp() (prewarms
+                               a session during OCR), refine(ProcessedScan, warmup:), timeout, retry
+                               without the photo / with a shorter prompt, IntelligenceTrace
     AppleIntelligenceReader.swift  FoundationModels only (#if canImport, iOS 26): @Generable line labels
-                               (no optional fields), session, error checks
+                               (no optional fields), session, photo read (#if compiler(>=6.4), iOS 27:
+                               Attachment(UIImage) in the prompt builder), ModelRequest, error checks
+    ReceiptPhoto.swift         the photo for the model: pages cropped to the text, cut into 1–4 overlapping
+                               sections side by side (about square), 896 px long side
     ModelReceiptVerifier.swift ModelReceiptReading (plain Swift labels), ScanEvidence, assemble():
                                amounts from the scan, the model's labels added to the rules' evidence
                                (modelEvidence), ItemReconciler for the items, totals chosen by
@@ -98,9 +102,12 @@ Tabbit/
                                alone), one receipt at a time, throttling waited out; PlaceSearching protocol
   Scanning/
     DocumentScannerView.swift  VNDocumentCameraViewController wrapped for SwiftUI
-    TextRecognizer.swift       VNRecognizeTextRequest (.accurate, top 3 candidates); RecognitionOptions,
-                               OCRSettings (language correction toggle, default off)
-    ScanProcessor.swift        OCR → parse → JPEG pages/thumbnail (off the main thread); writeExport(for:)
+    TextRecognizer.swift       read(): all pages in parallel, document reader on iOS 26+ else
+                               VNRecognizeTextRequest (.accurate, top 3); RecognitionOptions, OCRSettings
+                               (language correction default off, document reader default on)
+    DocumentReader.swift       RecognizeDocumentsRequest (iOS 26, tier 2): lines → blocks, table rows →
+                               RecognizedTextBlock.row (DocumentRows matches lines to rows)
+    ScanProcessor.swift        async: OCR alongside JPEG compression → parse → model photo; writeExport(for:)
     ExportRedactor.swift       blanks card/account/phone digits in exports
   Parsing/
     LineGrouper.swift          rebuilds receipt lines from Vision blocks: tilt guesses, grouping,
@@ -111,12 +118,13 @@ Tabbit/
                                cheapest unique set of changes that makes them add up wins
     ReceiptKeywords.swift      line roles with OCR-tolerant keywords (SJETOTAL → SUBTOTAL, TIP/GRATUITY),
                                included tax, discounts, rounding; German/Spanish/French/Italian/Dutch words
-    AmountParser.swift         money amounts at the end of a line
+    AmountParser.swift         money amounts at the end of a line; partly unreadable prices (DamagedAmount)
     LineAmountParser.swift     quantity and unit price ("2 @ 1.99", "2 BANANAS 1.99/EA", "1.25 LB @ 0.99"),
                                worked-out line totals, the other reading ("1.99" each or for both), "2× " names
     ReceiptDetailsParser.swift time of purchase, store address (street + city/postal lines), payment method
                                (card brand, debit, cash; never digits), printed tax rate
     ReceiptDateParser.swift    purchase date (explicit patterns, not NSDataDetector)
+    ReceiptAlphabet.swift      the receipt's script and language; stray characters from other alphabets read in context
     RulesReceiptParser.swift   the rules-based parser (fallback tier): analyze() (roles, amounts, price
                                column), itemCandidates() with Evidence (layout + keywords) and detail lines,
                                sale/deal and weight lines, codes/flags in names, discounts, tip (not tip
@@ -239,6 +247,12 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Quantities come three ways: "2 @ 1.99 3.98" (quantity, unit price, total), "2 @ 1.99" or "2 BANANAS 1.99/EA" (only the unit price: work out the total), and "2 BANANAS 3.98" (the total). "2 BANANAS 1.99" is usually 1.99 for both; reconciliation may read it as 2 × 1.99 when the subtotal says so. Sizes ("12 PACK", "6 INCH") are not quantities.
   - Deals ("2 FOR 1", "BUY 1 GET 1", "MIX & MATCH", "B1G1") describe prices and are never items; one with money off ("FREE", "GET") is a discount.
   - Sanity checks: tax is always less than the total (and rarely over 30% of it); a printed rate ("HST 13%") confirms a tax; tips are usually 10/15/18/20% of the bill before or after tax; a card payment, or cash minus change, confirms the total and stands in for one that couldn't be read.
+  - Fix OCR misreads with general tools, never a rule per mistake (owner's instruction after "Cinerna"). `OCRSpelling` is an edit distance where look-alike letters (rn/m, 0/O, 1/l, 5/S…) are cheap; the store name is repaired from the iPhone's dictionary (`UITextChecker`, on-device) only when one look-alike swap explains the difference, and the model's corrected store name counts as on the scan when it's a look-alike of it.
+  - Read each receipt in its own language and alphabet (owner's instruction: use context, like a person would). `ReceiptAlphabet` finds the main script and language (NaturalLanguage's `NLLanguageRecognizer`, on-device) and `LineGrouper.lines(from: scan)` reads every block through it: a word clearly in another script stays (a Greek word on an English receipt, an English line on a Greek one), a stray letter from another alphabet becomes its look-alike or is dropped ("13.00名"), and an accent the language doesn't write is removed only where the word looks garbled (next to digits, or "BUYă"). The document reader reads the phone's languages plus English first and reads a page again in the receipt's own language, or detecting it, when the words say so (`ReaderLanguages.retry`). The prompt tells the model the receipt's language and to read words in context.
+  - A price OCR could only partly read ("$24.9îŚ" for $24.99) isn't dropped: `AmountParser.damagedAmount` keeps the digits it could read, and `RulesReceiptParser.analyze` fills in the rest from the arithmetic (the subtotal, or total less tax, minus the other prices) when that fits, else by digit shape ("S" for 5). Both readers see the filled-in price, and the editor shows a Check mark on the items.
+  - Card slips and stubs ("Amount: $13.50", no products) have no items, only a total (`RulesReceiptParser.isPaymentSlip`, the model's `isItemized`).
+  - All-number dates are read every way they can be (month/day/year, day/month/year, two-digit year first) and the usual reading wins unless it's long ago or in the future and another reading is from the last year: "26-11-08" scanned in November 2026 is 2026-11-08.
+  - When Tabbit isn't sure, it says so: `ReceiptRecord.checks` (`FieldCheck`, with a reason) shows a "Check" mark in the editor for a repaired store name, an ambiguous or far-off date, a category only Apple Intelligence or the items suggested, or totals that don't add up. Editing the field or saving clears it.
   - The payment method is the name only ("Visa", "Debit", "Cash"), never card digits. Short or ordinary words ("MC", "BAR", "CARD") only count on a line that pays an amount.
 - **App icon:** `Tabbit/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`, a single 1024×1024 opaque PNG that iOS scales and masks.
   - It's generated from the owner's artwork `Design/AppIcon/app-icon-source.jpg` by `python3 Design/AppIcon/make_app_icon.py <source> <output>`. The script crops the tile out of the black mockup, repaints the old rounded corners, and adds a 6% background margin so iOS's mask doesn't clip the bunny's hole.
@@ -267,7 +281,10 @@ The design is tiered and entirely on-device. Each phone gets the best tier it su
    - **Done (v1.1):** Foundation Models (tier 1). The prompt shows the receipt in parts and numbers the item and total lines (detail lines under an item are indented without a number); the model labels each number (item, discount, subtotal, tax, taxTotal, tip, total, payment, savings, unitPrice, other), names the items and gives the brand name, category and date. It never writes an amount: `ModelReceiptVerifier` takes them from the scan, adds the model's labels to the layout and keyword evidence of each possible purchase, lets `ItemReconciler` pick the items that add up, tries the subtotal/tax/tip/total combinations (model labels first, keywords as a second opinion) and keeps the one that adds up, and uses the model's receipt unless the rules' adds up better. Item names must plausibly spell out the printed text; store names must be on the scan and lose store numbers and branches. 45 s timeout; a too-long receipt is retried shorter. Settings has a status row and an on/off toggle. `ReceiptParserKind.appleIntelligence` marks receipts it read, and `Receipt.intelligence` (an `IntelligenceTrace`) keeps the model's raw labels for Export Scan Data.
    - Lesson from the first 1.1 build: with optional `@Generable` fields the model left the total empty on every receipt, so every reading was rejected. Keep every generated field required (empty string or 0 for "none"), and never let the model copy numbers.
    - Lesson from the second 1.1 build (a Sobeys receipt): labelling every amount line on its own, the model called "1 @ 2/ $9.00" detail lines and the card slip's "Purchase $29.36" items, "you saved" lines discounts, and the supermarket "food". So the model now sees the receipt in parts with detail lines indented and unnumbered, its labels are evidence added to the layout's rather than the answer, the category list explains groceries vs dining, and department headings outrank its category. Lower-case names get capitals.
-   - Next: Vision's document reader (`RecognizeDocumentsRequest`, tier 2) for better rows and amounts.
+   - **Done (1.2):** Vision's document reader (tier 2) is the default OCR on iOS 26+, with the text recognizer as the per-page fallback and a Settings switch. Its table rows become `RecognizedTextBlock.row`; `LineGrouper` joins blocks of one row up to 1.5 text heights apart (never text printed in the same place) and sends a lone price to its row's name. `ScanResult.reader`/`seconds` record which reader ran and how long it took. Its automatic language detection is off and it reads only the phone's languages plus English (`ReaderLanguages`): left to detect the language, it filled faint characters in from other alphabets ("13.00名", "$24.9îŚ") and read worse than the English-only text recognizer.
+   - **Done (1.2):** the model's answer has a schema built per receipt (`ReceiptAnswerSchema`, `DynamicGenerationSchema`): `lines` is an array with exactly one answer per numbered line, in order, so it can't skip, repeat or run on through invented lines (it did on a one-line card slip). It also says whether the receipt is itemized.
+   - **Done (1.2):** on iOS 27 the model also sees the photo (`ReceiptPhoto`, Settings switch "Look at the photo too"). It still labels the numbered OCR lines and never writes amounts; the photo helps it pair names with prices and spell names. A photo error retries at once with text only. iOS 27 code needs the iOS 27 SDK: it's inside `#if compiler(>=6.4)`, and the `build` job runs on GitHub's `xcode-27` runner image (the `test` job stays on `macos-latest`). The model session is created and prewarmed when a scan starts, so it loads while OCR runs. `IntelligenceTrace.photo/reader/readSeconds` record what was used.
+   - Not used: Private Cloud Compute (the receipt would leave the phone) and Vision's OCRTool as a model tool (the OCR is already in the prompt; a tool call only adds a round trip).
    - The model can only be tested on the phone; CI runners can't run Apple Intelligence, so tests feed `ModelReceiptReading`s (line labels, right and wrong) to the verifier. When a real receipt reads badly, ask the owner for its Export Scan Data: the `intelligence` trace shows each label the model gave.
 4. **Done:** saving with editing (v0.4): design system, saved receipts, editable receipt screen, on-device storage with photos.
 5. **Done (v1.0):** splitting.

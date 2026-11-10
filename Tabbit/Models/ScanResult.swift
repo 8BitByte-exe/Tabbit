@@ -20,11 +20,17 @@ struct RecognizedTextBlock: Equatable {
     /// Vision's next-best readings of the same text (up to 2), best first.
     /// The parser checks them for keywords like SUBTOTAL when the top reading is garbled.
     var alternatives: [String] = []
+
+    /// Which printed row the block belongs to, when Vision's document reader (iOS 26) found
+    /// the receipt's rows as a table. Blocks with the same number on a page are one row, even
+    /// when the paper is tilted or curled. Nil when the reader didn't say.
+    var row: Int? = nil
 }
 
 /// JSON form used by scan exports and test fixtures:
 /// `{"text": "...", "confidence": 0.98, "x": 0.1, "y": 0.8, "width": 0.3, "height": 0.02, "page": 0}`,
-/// plus `"alternatives": [...]` when Vision offered other readings.
+/// plus `"alternatives": [...]` when Vision offered other readings and `"row": 3` when the
+/// document reader put the block in a table row.
 /// Coordinates are rounded to 4 decimals and confidence to 3 to keep files readable.
 extension RecognizedTextBlock: Codable {
     private enum CodingKeys: String, CodingKey {
@@ -36,6 +42,7 @@ extension RecognizedTextBlock: Codable {
         case height
         case page
         case alternatives
+        case row
     }
 
     init(from decoder: Decoder) throws {
@@ -48,12 +55,14 @@ extension RecognizedTextBlock: Codable {
         let height = try container.decode(Double.self, forKey: .height)
         let page = try container.decodeIfPresent(Int.self, forKey: .page) ?? 0
         let alternatives = try container.decodeIfPresent([String].self, forKey: .alternatives) ?? []
+        let row = try container.decodeIfPresent(Int.self, forKey: .row)
         self.init(
             text: text,
             confidence: confidence,
             boundingBox: CGRect(x: x, y: y, width: width, height: height),
             pageIndex: page,
-            alternatives: alternatives
+            alternatives: alternatives,
+            row: row
         )
     }
 
@@ -68,6 +77,9 @@ extension RecognizedTextBlock: Codable {
         try container.encode(pageIndex, forKey: .page)
         if !alternatives.isEmpty {
             try container.encode(alternatives, forKey: .alternatives)
+        }
+        if let row = row {
+            try container.encode(row, forKey: .row)
         }
     }
 
@@ -84,6 +96,13 @@ struct ScanResult: Equatable, Codable {
 
     /// All recognized blocks, page by page, in the order Vision returned them.
     let blocks: [RecognizedTextBlock]
+
+    /// Which reader produced the blocks: "documents" (Vision's document reader, iOS 26) or
+    /// "text" (Vision's text recognizer). Nil in older files.
+    var reader: String? = nil
+
+    /// How long reading the text took, in seconds. Kept for Export Scan Data, to compare readers.
+    var seconds: Double? = nil
 
     /// The blocks that belong to a single page.
     func blocks(onPage pageIndex: Int) -> [RecognizedTextBlock] {

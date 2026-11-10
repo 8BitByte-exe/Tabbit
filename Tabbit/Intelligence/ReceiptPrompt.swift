@@ -77,6 +77,10 @@ struct NumberedReceipt {
     let entries: [Entry]
     /// The receipt as the prompt shows it.
     let text: String
+    /// How prices that were partly unreadable were filled in (`RulesReceiptParser.repairNotes`).
+    let repairNotes: [String]
+    /// The receipt's main language ("en", "fr"), or nil when it's unclear (`ReceiptAlphabet`).
+    let language: String?
 
     init(scan: ScanResult, slopeChoice: Int = 0, maxCharacters: Int = ReceiptPrompt.maxCharacters) {
         self.init(lines: LineGrouper.lines(from: scan, slopeChoice: slopeChoice), maxCharacters: maxCharacters)
@@ -87,6 +91,8 @@ struct NumberedReceipt {
         let analyzed = RulesReceiptParser.analyze(lines)
         let candidates = RulesReceiptParser.itemCandidates(in: analyzed)
         self.candidates = candidates
+        self.repairNotes = RulesReceiptParser.repairNotes(in: analyzed)
+        self.language = ReceiptAlphabet.mainLanguage(of: lines.map { line in line.text })
         var detailLines: Set<Int> = []
         for candidate in candidates where candidate.isDetail {
             detailLines.insert(candidate.lineIndex)
@@ -295,8 +301,8 @@ enum ReceiptPrompt {
     - totals: the subtotal, taxes, tip and total.
     - payment and other details: how it was paid, savings summaries, surveys. Nothing there is an item.
 
-    Lines that matter start with a number in brackets, like [4]. Give each numbered line exactly one kind, \
-    and label each number only once:
+    Lines that matter start with a number in brackets, like [4]. Answer once for each numbered line, in order, \
+    with exactly one kind:
     - item: something bought, including fuel, deposits and bag fees. \
     When an item's name is on the line above its price, the price line is the item.
     - discount: money taken off what was bought, like a coupon or member discount, usually with a minus sign.
@@ -304,7 +310,8 @@ enum ReceiptPrompt {
     - tax: one tax, like TAX, SALES TAX, HST 13%, GST, PST, QST or VAT. Tax is always less than the total.
     - taxTotal: several taxes added up, like TOTAL TAX.
     - tip: a tip, gratuity or service charge that was added to the bill.
-    - total: the final amount to pay, like TOTAL, FINAL, Total after tax, Sub with tax, AMOUNT DUE or BALANCE DUE.
+    - total: the final amount to pay, like TOTAL, FINAL, Total after tax, Sub with tax, AMOUNT DUE or BALANCE DUE, \
+    or the amount on a card slip or payment stub that lists no products ("Amount: $13.50").
     - payment: how it was paid or money given back, like VISA, DEBIT, CASH, TENDERED or CHANGE.
     - savings: "you saved", regular or original prices, points and rewards. These are information, not purchases.
     - unitPrice: a price per litre, gallon, kg or lb on a line of its own, or an amount of fuel or weight.
@@ -317,16 +324,53 @@ enum ReceiptPrompt {
     Leave the name empty for every other kind.
 
     The store name is the business's brand only, like "Best Buy", "Shell" or "Trader Joe's", \
-    with OCR misspellings fixed. Never include the address, city, branch, store number or slogan.
+    spelled the way the business spells it: OCR often misreads letters (rn for m, 0 for O, 1 for l), so fix them. \
+    Never include the address, city, branch, store number or slogan.
 
-    The category is the kind of business, one of: \(categories).
+    Read every word in context, the way a person would. A receipt is written in one language, \
+    sometimes with whole lines in a second one, and never switches language or alphabet in the middle of a word. \
+    OCR sometimes puts a stray letter from another alphabet or an odd accent into a word: \
+    on an English receipt a word with one strange character is still an English word, so name it as the English word \
+    that fits the receipt. A line that is entirely in the second language stays in that language.
+
+    The category is the kind of business, one of: \(categories). Decide it from the store's name; \
+    when the name doesn't say, decide from what was bought (bananas, milk and bread mean groceries).
     """
 
-    /// The prompt for one receipt, or "" if it has no amounts to label.
-    static func make(for receipt: NumberedReceipt) -> String {
+    /// The prompt for one receipt, or "" if it has no amounts to label. `photoSections` is
+    /// how many sections the attached photo has (0 when there is no photo, see `ReceiptPhoto`).
+    static func make(for receipt: NumberedReceipt, photoSections: Int = 0) -> String {
         guard !receipt.entries.isEmpty else {
             return ""
         }
-        return "Label the \(receipt.entries.count) numbered lines of this receipt.\n\n" + receipt.text
+        var prompt = "Label the \(receipt.entries.count) numbered lines of this receipt.\n\n"
+        if let note = languageNote(receipt.language) {
+            prompt += note + "\n\n"
+        }
+        if photoSections > 0 {
+            prompt += photoNote(sections: photoSections) + "\n\n"
+        }
+        return prompt + receipt.text
+    }
+
+    /// "This receipt is in French." for a receipt whose language is clear, else nil.
+    static func languageNote(_ language: String?) -> String? {
+        guard let language = language,
+              let name = Locale(identifier: "en_US").localizedString(forLanguageCode: language) else {
+            return nil
+        }
+        return "This receipt is in \(name)."
+    }
+
+    /// What the model is told about the photo. The amounts always come from the text.
+    static func photoNote(sections: Int) -> String {
+        var layout = "The photo shows the same receipt."
+        if sections > 1 {
+            layout = "The photo shows the same receipt cut into \(sections) sections side by side: " +
+                "read the left section from top to bottom, then the next one."
+        }
+        return layout + " Use it to see which name and price are printed on the same line, " +
+            "which lines are indented details, and how misspelled words are really spelled. " +
+            "The line numbers and amounts are in the text below."
     }
 }
