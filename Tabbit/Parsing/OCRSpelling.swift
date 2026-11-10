@@ -111,7 +111,17 @@ enum OCRSpelling {
             guard misspelled.location != NSNotFound else {
                 return word
             }
-            let suggestions = checker.guesses(forWordRange: range, in: text as String, language: language) ?? []
+            // The dictionary's own suggestions, plus every spelling one look-alike swap away
+            // that the dictionary knows ("cinerna" → "cinema").
+            var suggestions = checker.guesses(forWordRange: range, in: text as String, language: language) ?? []
+            for variant in lookAlikeVariants(of: text as String) where !suggestions.contains(variant) {
+                let variantRange = NSRange(location: 0, length: (variant as NSString).length)
+                let unknown = checker.rangeOfMisspelledWord(in: variant, range: variantRange, startingAt: 0,
+                                                            wrap: false, language: language)
+                if unknown.location == NSNotFound {
+                    suggestions.append(variant)
+                }
+            }
             guard let fix = bestRepair(of: word, suggestions: suggestions),
                   fix.allSatisfy({ character in character.isLetter }) else {
                 return word
@@ -119,6 +129,26 @@ enum OCRSpelling {
             return matchingCase(fix, like: word)
         }
         return repaired.joined(separator: " ")
+    }
+
+    /// Every spelling one look-alike swap away from `word`, in lowercase: "cinerna" gives
+    /// "cinema" (rn → m), "cinerua" (n → u), "ciuerna" and so on.
+    static func lookAlikeVariants(of word: String) -> [String] {
+        let lowered = word.lowercased()
+        var variants: [String] = []
+        for (one, other) in lookAlikes {
+            for (from, to) in [(one, other), (other, one)] {
+                var searchStart = lowered.startIndex
+                while let found = lowered.range(of: from, range: searchStart..<lowered.endIndex) {
+                    let variant = lowered.replacingCharacters(in: found, with: to)
+                    if variant != lowered && !variants.contains(variant) {
+                        variants.append(variant)
+                    }
+                    searchStart = lowered.index(after: found.lowerBound)
+                }
+            }
+        }
+        return variants
     }
 
     /// The dictionary for the iPhone's first language that has one, or US English.

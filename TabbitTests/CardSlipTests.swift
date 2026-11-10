@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 @testable import Tabbit
 
@@ -90,7 +91,15 @@ final class CardSlipTests: XCTestCase {
     }
 
     func testDictionaryRepairsTheStoreName() {
-        XCTAssertEqual(OCRSpelling.repairedName("Revue Cinerna"), "Revue Cinema")
+        XCTAssertTrue(OCRSpelling.lookAlikeVariants(of: "Cinerna").contains("cinema"))
+        let checker = UITextChecker()
+        let language = OCRSpelling.dictionaryLanguage
+        let known = checker.rangeOfMisspelledWord(in: "cinema", range: NSRange(location: 0, length: 6),
+                                                  startingAt: 0, wrap: false, language: language)
+        let unknown = checker.rangeOfMisspelledWord(in: "cinerna", range: NSRange(location: 0, length: 7),
+                                                    startingAt: 0, wrap: false, language: language)
+        XCTAssertEqual(OCRSpelling.repairedName("Revue Cinerna"), "Revue Cinema",
+                       "dictionary \(language) of \(UITextChecker.availableLanguages); cinema known: \(known.location == NSNotFound), cinerna unknown: \(unknown.location != NSNotFound)")
         XCTAssertEqual(OCRSpelling.repairedName("Sobeys #1234"), "Sobeys #1234")
         XCTAssertEqual(OCRSpelling.repairedName("Trader Joe's"), "Trader Joe's")
     }
