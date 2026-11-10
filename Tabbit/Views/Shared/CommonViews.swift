@@ -195,6 +195,11 @@ enum DateText {
     static func long(_ date: Date) -> String {
         return date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().year())
     }
+
+    /// "2:32 PM" (or "14:32"), the way the phone shows times.
+    static func time(_ time: ClockTime) -> String {
+        return time.date(on: Date()).formatted(date: .omitted, time: .shortened)
+    }
 }
 
 /// Pick a day: a wheel in a clay sheet, instead of the system's compact date button.
@@ -225,6 +230,55 @@ struct DatePickerSheet: View {
         .frame(maxHeight: .infinity, alignment: .top)
         .themedScreen()
         .presentationDetents([.height(440), .large])
+        .claySheet()
+    }
+}
+
+/// Pick a time of day, or remove it: a wheel in a clay sheet.
+struct TimePickerSheet: View {
+    @Binding var time: ClockTime?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var picked: Date
+
+    init(time: Binding<ClockTime?>) {
+        _time = time
+        let start = time.wrappedValue ?? ClockTime(hour: 12, minute: 0)
+        _picked = State(initialValue: start.date(on: Date()))
+    }
+
+    var body: some View {
+        VStack(spacing: Theme.Spacing.l) {
+            SheetHeader(title: "Time", onClose: {
+                dismiss()
+            })
+            DatePicker("Time", selection: $picked, displayedComponents: .hourAndMinute)
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+            Button(action: {
+                time = ClockTime(picked)
+                dismiss()
+            }, label: {
+                Label("Done", systemImage: "checkmark")
+            })
+            .buttonStyle(NeumorphicButtonStyle(prominence: .primary))
+            if time != nil {
+                Button(action: {
+                    time = nil
+                    dismiss()
+                }, label: {
+                    Label("Remove Time", systemImage: "xmark")
+                })
+                .buttonStyle(NeumorphicButtonStyle(prominence: .secondary))
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.screen)
+        .padding(.top, Theme.Spacing.xl)
+        .padding(.bottom, Theme.Spacing.l)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .themedScreen()
+        .presentationDetents([.height(520), .large])
         .claySheet()
     }
 }

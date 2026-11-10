@@ -25,7 +25,28 @@ enum ScanAutofill {
             unreadable.insert(.date)
         }
 
-        let category = CategoryGuesser.guess(merchant: merchant, items: parsed.lineItems.map { item in item.name })
+        // The address, time and payment method are on most receipts; say so when they weren't found.
+        let location = parsed.location ?? ""
+        if location.isEmpty {
+            unreadable.insert(.location)
+        } else {
+            autofilled.insert(.location)
+        }
+        if parsed.time != nil {
+            autofilled.insert(.time)
+        } else {
+            unreadable.insert(.time)
+        }
+        let paymentMethod = parsed.paymentMethod ?? ""
+        if paymentMethod.isEmpty {
+            unreadable.insert(.payment)
+        } else {
+            autofilled.insert(.payment)
+        }
+
+        let receiptLines = LineGrouper.lines(from: processed.scan).map { line in line.text }
+        let category = CategoryGuesser.guess(merchant: merchant, items: parsed.lineItems.map { item in item.name },
+                                             suggestion: processed.suggestedCategory, receiptLines: receiptLines)
         if category != .other {
             autofilled.insert(.category)
         }
@@ -55,7 +76,10 @@ enum ScanAutofill {
             createdAt: now,
             updatedAt: now,
             merchant: merchant,
+            location: location,
             date: date,
+            time: parsed.time,
+            paymentMethod: paymentMethod,
             category: category,
             paidBy: paidBy,
             items: items,
@@ -74,13 +98,15 @@ enum ScanAutofill {
     }
 }
 
-/// Guesses a spending category from the merchant name, then from the items.
+/// Guesses a spending category from the merchant name, what the receipt itself shows
+/// (department headings), Apple Intelligence's suggestion, then the items.
 ///
 /// Keywords of 4 letters or fewer must be whole words ("inn" mustn't match "dinner",
 /// "tea" mustn't match "steak"); longer ones may appear inside words ("bakery" in
 /// "bakeryhouse"). Rules are checked in order, so specific ones come first.
 enum CategoryGuesser {
     private static let rules: [(SpendCategory, [String])] = [
+        (.health, ["drug mart", "pharmaprix", "rexall"]),
         (.coffee, ["coffee", "espresso", "starbucks", "cafe", "café", "latte", "roastery", "roasters", "teahouse",
                    "tea", "dunkin", "costa", "kaffee", "cafeteria"]),
         (.food, ["restaurant", "grill", "bistro", "pizza", "pizzeria", "burger", "sushi", "taco", "kitchen", "diner",
@@ -91,10 +117,13 @@ enum CategoryGuesser {
                    "taproom", "lounge", "biergarten"]),
         (.groceries, ["market", "grocery", "grocer", "supermarket", "foods", "mart", "trader joe", "whole foods",
                       "aldi", "lidl", "kroger", "safeway", "costco", "produce", "tesco", "sainsbury", "carrefour",
-                      "rewe", "edeka", "mercado", "albert heijn", "spar", "coop", "publix", "wegmans", "mercadona"]),
+                      "rewe", "edeka", "mercado", "albert heijn", "spar", "coop", "publix", "wegmans", "mercadona",
+                      "sobeys", "loblaws", "no frills", "nofrills", "food basics", "freshco", "zehrs", "fortinos",
+                      "longo's", "longos", "farm boy", "superstore", "iga", "provigo", "maxi", "metro", "foodland",
+                      "save-on", "t&t", "food lion", "giant eagle", "h-e-b", "meijer", "sprouts"]),
         (.fuel, ["fuel", "gas station", "petrol", "shell", "chevron", "exxon", "esso", "texaco", "arco", "valero",
                  "tankstelle", "diesel", "unleaded"]),
-        (.transport, ["uber", "lyft", "taxi", "cab", "parking", "transit", "metro", "rail", "railway", "train", "bus",
+        (.transport, ["uber", "lyft", "taxi", "cab", "parking", "transit", "rail", "railway", "train", "bus",
                       "toll", "tram", "ferry", "subway", "bahn", "scooter", "car rental", "rental car"]),
         (.travel, ["airline", "airlines", "airways", "airport", "flight", "expedia", "lufthansa", "ryanair",
                    "easyjet", "travel", "tours", "excursion"]),
@@ -125,11 +154,41 @@ enum CategoryGuesser {
         (.shopping, ["store", "shop", "outlet", "mall", "target", "walmart", "amazon", "department", "books"]),
     ]
 
-    static func guess(merchant: String, items: [String]) -> SpendCategory {
+    /// A store name that names its category ("Joe's Pizza") wins; then what the receipt shows
+    /// about the store (department headings mean a supermarket); then Apple Intelligence's
+    /// suggestion, which understands the whole receipt; then keywords in the items.
+    static func guess(merchant: String, items: [String], suggestion: SpendCategory? = nil,
+                      receiptLines: [String] = []) -> SpendCategory {
         if let category = match(merchant) {
             return category
         }
+        if let category = departmentHint(in: receiptLines) {
+            return category
+        }
+        if let suggestion = suggestion, suggestion != .other {
+            return suggestion
+        }
         return match(items.joined(separator: " ")) ?? .other
+    }
+
+    /// Food departments a supermarket prints over its items. One of the clear ones, or two of any.
+    private static let groceryDepartments: Set<String> = [
+        "PRODUCE", "GROCERY", "GROCERIES", "DAIRY", "FROZEN", "MEAT", "MEATS", "SEAFOOD", "DELI", "BAKERY",
+    ]
+    private static let clearGroceryDepartments: Set<String> = ["PRODUCE", "GROCERY", "GROCERIES", "DAIRY", "FROZEN"]
+
+    /// Groceries, if the receipt prints food department headings ("PRODUCE", "21-GROCERY").
+    static func departmentHint(in lines: [String]) -> SpendCategory? {
+        var found: Set<String> = []
+        for line in lines where ReceiptKeywords.isHeading(line) {
+            for word in ReceiptKeywords.words(in: line) where groceryDepartments.contains(word) {
+                found.insert(word)
+            }
+        }
+        if !found.isDisjoint(with: clearGroceryDepartments) || found.count >= 2 {
+            return .groceries
+        }
+        return nil
     }
 
     private static func match(_ text: String) -> SpendCategory? {

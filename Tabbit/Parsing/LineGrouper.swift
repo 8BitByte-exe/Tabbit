@@ -185,7 +185,9 @@ enum LineGrouper {
             var bestScore = CGFloat.greatestFiniteMagnitude
             for candidate in [index - 1, index + 1] where candidate >= 0 && candidate < rows.count {
                 let text = rowText(rows[candidate])
-                guard hasLetters(text), AmountParser.trailingAmount(in: text) == nil else {
+                // A department heading ("PRODUCE") is never the name a stray price belongs to.
+                guard hasLetters(text), AmountParser.trailingAmount(in: text) == nil,
+                      !ReceiptKeywords.isHeading(text) else {
                     continue
                 }
                 let distance = abs(averageY(rows[candidate]) - y)

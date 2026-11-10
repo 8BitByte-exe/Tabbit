@@ -45,8 +45,11 @@ enum TipValue: Equatable {
 /// Fields that scanning can fill in (used for "autofilled" and "couldn't read" marks).
 enum ReceiptField: String, Codable, CaseIterable {
     case merchant
+    case location
     case date
+    case time
     case category
+    case payment
     case total
     case tax
     case tip
@@ -68,8 +71,14 @@ struct ReceiptRecord: Identifiable, Equatable {
     var updatedAt: Date
 
     var merchant: String
+    /// The store's address, as printed. Empty if unknown.
+    var location: String
     /// The purchase day (midnight, local time).
     var date: Date
+    /// The time of purchase, if known.
+    var time: ClockTime?
+    /// How it was paid ("Visa", "Cash"…). Empty if unknown.
+    var paymentMethod: String
     var category: SpendCategory
     /// Who paid. Defaults to me.
     var paidBy: UUID
@@ -95,8 +104,8 @@ struct ReceiptRecord: Identifiable, Equatable {
     var languageCorrection: Bool?
 
     init(id: UUID = UUID(), groupID: UUID? = nil, createdAt: Date = Date(), updatedAt: Date = Date(),
-         merchant: String = "", date: Date = Calendar.current.startOfDay(for: Date()),
-         category: SpendCategory = .other, paidBy: UUID = Person.meID, items: [SplitItem] = [],
+         merchant: String = "", location: String = "", date: Date = Calendar.current.startOfDay(for: Date()),
+         time: ClockTime? = nil, paymentMethod: String = "", category: SpendCategory = .other, paidBy: UUID = Person.meID, items: [SplitItem] = [],
          tax: Decimal? = nil, tip: TipValue? = nil, total: Decimal? = nil, includeFees: Bool = true,
          source: ReceiptSource = .manual, autofilled: Set<ReceiptField> = [], unreadable: Set<ReceiptField> = [],
          pageImageCount: Int = 0, scan: ScanResult? = nil, parsed: Receipt? = nil, languageCorrection: Bool? = nil) {
@@ -105,7 +114,10 @@ struct ReceiptRecord: Identifiable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.merchant = merchant
+        self.location = location
         self.date = date
+        self.time = time
+        self.paymentMethod = paymentMethod
         self.category = category
         self.paidBy = paidBy
         self.items = items
@@ -166,6 +178,10 @@ struct ReceiptRecord: Identifiable, Equatable {
             tax: tax,
             total: effectiveTotal,
             tip: tip == nil ? nil : tipAmount,
+            location: location.isEmpty ? nil : location,
+            time: time,
+            paymentMethod: paymentMethod.isEmpty ? nil : paymentMethod,
+            includedTax: parsed?.includedTax,
             parser: parsed?.parser ?? .rules,
             notes: parsed?.notes ?? []
         )
@@ -275,7 +291,8 @@ extension ReceiptRecord: Codable {
     static let schemaVersion = 2
 
     private enum CodingKeys: String, CodingKey {
-        case schema, id, groupID, createdAt, updatedAt, merchant, date, category, paidBy, items
+        case schema, id, groupID, createdAt, updatedAt, merchant, location, date, time, paymentMethod, category
+        case paidBy, items
         case tax, tip, total, includeFees, source, autofilled, unreadable, pageImageCount
         case scan, parsed, languageCorrection
     }
@@ -288,7 +305,10 @@ extension ReceiptRecord: Codable {
             createdAt: try container.decode(Date.self, forKey: .createdAt),
             updatedAt: try container.decode(Date.self, forKey: .updatedAt),
             merchant: try container.decodeIfPresent(String.self, forKey: .merchant) ?? "",
+            location: try container.decodeIfPresent(String.self, forKey: .location) ?? "",
             date: try container.decode(Date.self, forKey: .date),
+            time: try? container.decodeIfPresent(ClockTime.self, forKey: .time),
+            paymentMethod: try container.decodeIfPresent(String.self, forKey: .paymentMethod) ?? "",
             category: try container.decodeIfPresent(SpendCategory.self, forKey: .category) ?? .other,
             paidBy: try container.decodeIfPresent(UUID.self, forKey: .paidBy) ?? Person.meID,
             items: try container.decodeIfPresent([SplitItem].self, forKey: .items) ?? [],
@@ -314,7 +334,10 @@ extension ReceiptRecord: Codable {
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
         try container.encode(merchant, forKey: .merchant)
+        try container.encode(location, forKey: .location)
         try container.encode(date, forKey: .date)
+        try container.encodeIfPresent(time, forKey: .time)
+        try container.encode(paymentMethod, forKey: .paymentMethod)
         try container.encode(category, forKey: .category)
         try container.encode(paidBy, forKey: .paidBy)
         try container.encode(items, forKey: .items)

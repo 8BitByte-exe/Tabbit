@@ -5,13 +5,15 @@ import UIKit
 struct ProcessedScan {
     /// The raw OCR result.
     let scan: ScanResult
-    /// What the parser made of it.
-    let receipt: Receipt
+    /// What the parser made of it (the rules, or Apple Intelligence once it's checked).
+    var receipt: Receipt
     /// One JPEG per page (long side at most 2000 px).
     let pageJPEGs: [Data]
     /// A small JPEG of the first page for the home screen.
     let thumbnailJPEG: Data?
     let languageCorrection: Bool
+    /// Apple Intelligence's guess at the category, if it read the receipt.
+    var suggestedCategory: SpendCategory? = nil
 }
 
 /// Runs OCR, parsing and photo compression for one scan. Everything happens on the device.

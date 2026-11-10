@@ -42,8 +42,14 @@ struct SettleUpView: View {
                 summaryCard(transfers: transfers)
 
                 if !transfers.isEmpty {
-                    SectionLabel(title: "Payments")
-                        .padding(.top, Theme.Spacing.s)
+                    HStack {
+                        SectionLabel(title: "Payments")
+                        Spacer()
+                        Label("Swipe right to mark paid", systemImage: "hand.draw")
+                            .font(Theme.Fonts.caption)
+                            .foregroundStyle(Theme.Colors.secondaryText)
+                    }
+                    .padding(.top, Theme.Spacing.s)
                     ForEach(transfers) { transfer in
                         transferCard(transfer, group: group)
                     }
@@ -108,7 +114,16 @@ struct SettleUpView: View {
 
     // MARK: - Transfers
 
+    /// Swipe right to mark paid; tap to see the receipts behind the payment.
     private func transferCard(_ transfer: Transfer, group: SplitGroup) -> some View {
+        SwipeToConfirm(title: "Mark Paid", symbol: "checkmark.circle.fill", onConfirm: {
+            markPaid(transfer, group: group)
+        }, content: {
+            transferPlate(transfer, group: group)
+        })
+    }
+
+    private func transferPlate(_ transfer: Transfer, group: SplitGroup) -> some View {
         Expandable(isExpanded: expansionBinding(transfer.id)) {
             TransferHeadline(transfer: transfer, people: group.members)
         } content: {
@@ -127,9 +142,6 @@ struct SettleUpView: View {
         }
         .padding(Theme.Spacing.l)
         .clayPlate()
-        .accessibilityAction(named: "Mark paid") {
-            markPaid(transfer, group: group)
-        }
     }
 
     private func expansionBinding(_ id: String) -> Binding<Bool> {
@@ -155,7 +167,17 @@ struct SettleUpView: View {
 
     // MARK: - History
 
+    /// A recorded payment: swipe right (or tap the button) to undo it.
     private func settlementRow(_ settlement: Settlement, group: SplitGroup) -> some View {
+        SwipeToConfirm(title: "Undo", symbol: "arrow.uturn.backward", cornerRadius: Theme.Radius.tile,
+                       onConfirm: {
+                           undo(settlement, group: group)
+                       }, content: {
+                           settlementPlate(settlement, group: group)
+                       })
+    }
+
+    private func settlementPlate(_ settlement: Settlement, group: SplitGroup) -> some View {
         let from = group.members.displayName(settlement.from)
         let toName = group.members.displayName(settlement.to)
         let to = toName == "You" ? "you" : toName

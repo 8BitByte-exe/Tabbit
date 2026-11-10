@@ -16,10 +16,13 @@ struct ReceiptEditorView: View {
     @State private var dialog: ClayDialog?
     @State private var choosingCategory = false
     @State private var choosingDate = false
+    @State private var choosingTime = false
     @FocusState private var focus: EditorFocus?
 
     enum EditorFocus: Hashable {
         case merchant
+        case location
+        case payment
         case itemName(UUID)
         case itemPrice(UUID)
         case tax
@@ -92,6 +95,9 @@ struct ReceiptEditorView: View {
         }
         .sheet(isPresented: $choosingDate) {
             DatePickerSheet(date: $form.date)
+        }
+        .sheet(isPresented: $choosingTime) {
+            TimePickerSheet(time: $form.time)
         }
         .onAppear {
             if session.isNew && session.record.source == .manual {
@@ -216,14 +222,17 @@ struct ReceiptEditorView: View {
         let names = missing.map { field in ReceiptEditorView.name(of: field) }
         let list = ListFormatter.localizedString(byJoining: names)
         let pronoun = missing.count == 1 && missing[0] != .items ? "it" : "them"
-        return "Couldn't read the \(list). Add \(pronoun) if you can."
+        return "Couldn't find the \(list). Add \(pronoun) if the receipt shows \(pronoun)."
     }
 
     static func name(of field: ReceiptField) -> String {
         switch field {
         case .merchant: return "merchant"
+        case .location: return "store location"
         case .date: return "date"
+        case .time: return "time"
         case .category: return "category"
+        case .payment: return "payment method"
         case .total: return "total"
         case .tax: return "tax"
         case .tip: return "tip"
@@ -260,6 +269,15 @@ struct ReceiptEditorView: View {
                         .accessibilityLabel("Merchant")
                 }
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    fieldLabel("Location", .location)
+                    TextField("Store address", text: $form.location)
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .focused($focus, equals: .location)
+                        .insetField()
+                        .accessibilityLabel("Location")
+                }
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     fieldLabel("Date", .date)
                     Button(action: {
                         focus = nil
@@ -278,6 +296,24 @@ struct ReceiptEditorView: View {
                     .accessibilityLabel("Date, \(DateText.long(form.date))")
                 }
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    fieldLabel("Time", .time)
+                    Button(action: {
+                        focus = nil
+                        choosingTime = true
+                    }, label: {
+                        HStack {
+                            Image(systemName: "clock")
+                                .foregroundStyle(Theme.Colors.secondaryText)
+                            Text(form.time.map { time in DateText.time(time) } ?? "Add a time")
+                                .foregroundStyle(form.time == nil ? Theme.Colors.secondaryText : Theme.Colors.text)
+                            Spacer()
+                        }
+                        .font(Theme.Fonts.body)
+                    })
+                    .buttonStyle(NeumorphicCardButtonStyle(padding: Theme.Spacing.m))
+                    .accessibilityLabel(form.time.map { time in "Time, \(DateText.time(time))" } ?? "Add a time")
+                }
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     fieldLabel("Category", .category)
                     Button(action: {
                         focus = nil
@@ -293,6 +329,15 @@ struct ReceiptEditorView: View {
                     })
                     .buttonStyle(NeumorphicCardButtonStyle(padding: Theme.Spacing.m))
                     .accessibilityLabel("Category, \(form.category.title)")
+                }
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    fieldLabel("Paid with", .payment)
+                    TextField("Card, cash…", text: $form.paymentMethod)
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .focused($focus, equals: .payment)
+                        .insetField()
+                        .accessibilityLabel("Paid with")
                 }
             }
         }
@@ -387,6 +432,12 @@ struct ReceiptEditorView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 amountField(title: "Tax", field: .tax, text: $form.taxText, focusValue: .tax,
                             invalid: form.invalidFields.contains(.tax))
+                if let included = session.record.parsed?.includedTax, included > 0,
+                   form.taxText.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Label("The prices already include \(Money.string(included)) tax.", systemImage: "info.circle")
+                        .font(Theme.Fonts.caption)
+                        .foregroundStyle(Theme.Colors.secondaryText)
+                }
                 tipField
                 amountField(title: "Total", field: .total, text: $form.totalText, focusValue: .total,
                             invalid: form.invalidFields.contains(.total),

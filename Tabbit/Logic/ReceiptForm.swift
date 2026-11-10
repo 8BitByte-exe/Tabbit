@@ -29,7 +29,10 @@ struct ReceiptForm: Equatable {
     }
 
     var merchant: String
+    var location: String
     var date: Date
+    var time: ClockTime?
+    var paymentMethod: String
     var category: SpendCategory
     var paidBy: UUID
     var items: [Item]
@@ -41,7 +44,10 @@ struct ReceiptForm: Equatable {
 
     init(_ record: ReceiptRecord) {
         merchant = record.merchant
+        location = record.location
         date = record.date
+        time = record.time
+        paymentMethod = record.paymentMethod
         category = record.category
         paidBy = record.paidBy
         items = record.items.map { item in
@@ -136,7 +142,10 @@ struct ReceiptForm: Equatable {
     func record(updating base: ReceiptRecord) -> ReceiptRecord {
         var record = base
         record.merchant = merchant.trimmingCharacters(in: .whitespacesAndNewlines)
+        record.location = location.trimmingCharacters(in: .whitespacesAndNewlines)
         record.date = Calendar.current.startOfDay(for: date)
+        record.time = time
+        record.paymentMethod = paymentMethod.trimmingCharacters(in: .whitespacesAndNewlines)
         record.category = category
         record.paidBy = paidBy
         record.items = items.compactMap { item in
@@ -171,8 +180,17 @@ struct ReceiptForm: Equatable {
         if old.merchant != new.merchant {
             changed.insert(.merchant)
         }
+        if old.location != new.location {
+            changed.insert(.location)
+        }
         if old.date != new.date {
             changed.insert(.date)
+        }
+        if old.time != new.time {
+            changed.insert(.time)
+        }
+        if old.paymentMethod != new.paymentMethod {
+            changed.insert(.payment)
         }
         if old.category != new.category {
             changed.insert(.category)

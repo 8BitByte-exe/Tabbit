@@ -18,6 +18,9 @@ enum ReceiptLineRole: Equatable {
     case tip
     /// Card, cash, change and similar lines.
     case payment
+    /// A price per unit or an amount of fuel or weight: "PRICE/L 1.67", "LITRES 32.89".
+    /// Never a purchase on its own.
+    case unitPrice
     /// "MEMBER DISCOUNT", "COUPON", "RABATT": money off, even when printed without a minus.
     case discount
     /// Cash rounding ("ROUNDING -0.02"): part of the total, not a purchase.
@@ -118,6 +121,44 @@ enum ReceiptKeywords {
     private static let taxWords: Set<String> = [
         "TAX", "TAXES", "HST", "GST", "PST", "QST", "VAT",
         "MWST", "UST", "IVA", "TVA", "BTW", "MOMS", "IGV", "DPH", "PTU", "KDV",
+        // Canada in French: TPS = GST, TVQ = QST, TVH = HST.
+        "TPS", "TVQ", "TVH",
+    ]
+
+    /// "Total before tax", "Subtotal excl. tax", "Pre-tax": the amount before tax.
+    private static let beforeTaxWords: Set<String> = [
+        "BEFORE", "PRE", "PRETAX", "EXCL", "EXCLUDING", "EXCLUDES", "WITHOUT", "WO",
+    ]
+
+    /// "Total after tax", "Sub with tax", "Total w/ tax": the amount to pay.
+    private static let afterTaxWords: Set<String> = ["AFTER", "WITH", "W"]
+
+    /// Words that may stand next to SUB or FINAL in a subtotal or total line ("SUB TTL", "FINAL AMOUNT DUE").
+    private static let summaryFillerWords: Set<String> = [
+        "SUB", "TTL", "TOT", "AMT", "AMOUNT", "DUE", "BALANCE", "FINAL", "TOTAL", "PRICE",
+    ]
+
+    /// "FUEL TOTAL 54.92" on a gas receipt is the fuel bought, not the receipt's total.
+    private static let fuelWords: Set<String> = [
+        "FUEL", "GAS", "GASOLINE", "PETROL", "DIESEL", "UNLEADED", "PUMP",
+    ]
+
+    /// Amounts of fuel or weight: "LITRES 32.89", "VOLUME 32.89 L".
+    private static let quantityWords: Set<String> = [
+        "L", "LTR", "LTRS", "LITRE", "LITRES", "LITER", "LITERS", "VOLUME", "GAL", "GALS", "GALLON", "GALLONS",
+    ]
+
+    /// Units in a price per unit: "PRICE/L", "PRICE PER LITRE", "$/KG".
+    private static let unitWords: Set<String> = [
+        "L", "LTR", "LITRE", "LITER", "GAL", "GALLON", "KG", "LB", "G", "OZ", "EA", "EACH", "UNIT",
+    ]
+
+    /// Department headings printed above groups of items ("PRODUCE", "21-GROCERY",
+    /// "HEALTH & BEAUTY"). Only lines made of nothing but these words count.
+    private static let headingWords: Set<String> = [
+        "PRODUCE", "GROCERY", "GROCERIES", "DELI", "BAKERY", "MEAT", "MEATS", "SEAFOOD", "DAIRY", "FROZEN",
+        "HOUSEHOLD", "PHARMACY", "BEVERAGES", "SNACKS", "GENERAL", "MERCHANDISE", "HBC", "FLORAL",
+        "DEPARTMENT", "DEPT", "HEALTH", "BEAUTY",
     ]
 
     /// Words for the total besides TOTAL itself (TOTALE, TOTAAL and TOTALT are within
@@ -170,14 +211,11 @@ enum ReceiptKeywords {
 
     /// What kind of line this is.
     static func role(for text: String) -> ReceiptLineRole {
-        let words = self.words(in: text)
+        let words = joiningInitials(self.words(in: text))
         guard !words.isEmpty else {
             return .other
         }
-        if isSubtotal(words) {
-            return .subtotal
-        }
-
+        let letterWords = words.filter { word in word.rangeOfCharacter(from: .letters) != nil }
         let hasTotal = words.contains(where: { word in
             isLike(word, "TOTAL") || exactTotalWords.contains(word)
         })
@@ -185,6 +223,30 @@ enum ReceiptKeywords {
         let saysIncluded = words.contains(where: { word in
             includedPrefixes.contains(where: { prefix in word.hasPrefix(prefix) })
         })
+
+        // "Total before tax" is the subtotal; "Total after tax" and "Sub with tax" are the total.
+        if hasTax && words.contains(where: { word in beforeTaxWords.contains(word) }) {
+            return .subtotal
+        }
+        if hasTax && words.contains(where: { word in afterTaxWords.contains(word) }) {
+            return .strongTotal
+        }
+        if isSubtotal(words) {
+            return .subtotal
+        }
+        // "SUB 45.67", "SUB TTL".
+        if letterWords.contains("SUB") && letterWords.allSatisfy({ word in summaryFillerWords.contains(word) }) {
+            return .subtotal
+        }
+        // "FINAL", "FINAL TOTAL", "FINAL AMOUNT DUE" (but not "FINAL SALE", which marks an item).
+        if letterWords.contains("FINAL") && letterWords.allSatisfy({ word in
+            summaryFillerWords.contains(word) || isLike(word, "TOTAL")
+        }) {
+            return .strongTotal
+        }
+        if hasTotal && !hasTax && words.contains(where: { word in fuelWords.contains(word) }) {
+            return .other
+        }
 
         if hasTotal && hasTax && !saysIncluded {
             return .taxTotal
@@ -216,6 +278,14 @@ enum ReceiptKeywords {
         }
         if words.contains(where: { word in word == "OFF" || matchesAny(word, discountWords) }) {
             return .discount
+        }
+        if isDeal(text) {
+            // "BUY 1 GET 1 FREE -1.99" takes money off; "2 FOR 1" or "MIX & MATCH" only describes a deal.
+            let takesMoneyOff = words.contains(where: { word in word == "FREE" || word == "GET" || word == "HALF" })
+            return takesMoneyOff ? .discount : .info
+        }
+        if isUnitPrice(words, text: text) {
+            return .unitPrice
         }
         if isInfo(words) {
             return .info
@@ -288,15 +358,124 @@ enum ReceiptKeywords {
         guard !letterWords.isEmpty else {
             return false
         }
+        let hasSavingsWord = letterWords.contains(where: { word in isSavingsWord(word) })
         var sawInfoWord = false
         for word in letterWords {
-            if matchesAny(word, infoWords) {
+            if matchesAny(word, infoWords) || isSavingsWord(word) {
                 sawInfoWord = true
-            } else if !infoFillerWords.contains(word) {
+            } else if infoFillerWords.contains(word) {
+                continue
+            } else if hasSavingsWord && word.count <= 3 {
+                // OCR garbles the short words next to "SAVED": "VOU SAVED", "Y0U SAVED".
+                continue
+            } else {
                 return false
             }
         }
         return sawInfoWord
+    }
+
+    /// "SAVED", "SAVINGS", and run-together misreads like "YOUSAVED" or "TOTALSAVINGS".
+    private static func isSavingsWord(_ word: String) -> Bool {
+        if isLike(word, "SAVED") || isLike(word, "SAVINGS") || word == "SAVE" || word == "SAVES" {
+            return true
+        }
+        return word.count > 5 && (word.contains("SAVED") || word.contains("SAVING"))
+    }
+
+    /// "YOU SAVED 2.98", "TOTAL SAVINGS 4.00": money the customer didn't spend. Never a purchase.
+    static func isSavings(_ text: String) -> Bool {
+        return words(in: text).contains(where: { word in isSavingsWord(word) })
+    }
+
+    /// "PRICE/L 1.67", "PRICE PER LITRE", "UNIT PRICE 0.99", "LITRES 32.89", "VOLUME 32.89 L".
+    private static func isUnitPrice(_ words: [String], text: String) -> Bool {
+        let letterWords = words.filter { word in word.rangeOfCharacter(from: .letters) != nil }
+        guard !letterWords.isEmpty else {
+            return false
+        }
+        if letterWords.allSatisfy({ word in quantityWords.contains(word) }) {
+            return true
+        }
+        if letterWords.contains("PPL") {
+            return true
+        }
+        guard letterWords.contains("PRICE") else {
+            return false
+        }
+        if letterWords.contains("UNIT") || letterWords.contains("PER") {
+            return true
+        }
+        // "PRICE/L", "PRICE $/L": a slash with a unit, and no "@" (that's a quantity line under an item).
+        return text.contains("/") && !text.contains("@")
+            && letterWords.contains(where: { word in unitWords.contains(word) })
+    }
+
+    /// Words of deal descriptions: "2 FOR 1", "BUY 1 GET 1 FREE", "BOGO", "MIX & MATCH", "3 FOR 2 OFFER".
+    private static let dealWords: Set<String> = [
+        "BOGO", "BOGOF", "BUY", "GET", "FREE", "FOR", "DEAL", "DEALS", "PROMO", "PROMOTION", "OFFER", "OFFERS",
+        "MIX", "MATCH", "AND", "N", "ANY", "HALF", "PRICE", "MULTIBUY", "MULTI", "SPECIAL", "WHEN", "YOU", "OR",
+        "MORE", "ITEM", "ITEMS", "EA", "EACH", "X", "APPLIED", "PCT", "PERCENT", "SECOND", "ND", "THE", "OF",
+    ]
+
+    // "B1G1", "B2G1F": buy-one-get-one codes.
+    private static let dealCodePattern = Patterns.make(#"\bB\d+G\d+F?\b"#, caseInsensitive: true)
+    // "2 FOR 1", "3 for 2", "2 FOR $5" (not "2 FOR 5.00", which is a price for the pair).
+    private static let countForCountPattern = Patterns.make(
+        #"(?<![\d.,])\d+\s*FOR\s*[$€£]?\d+(?![\d.,])"#,
+        caseInsensitive: true
+    )
+
+    /// True if the line only describes a deal ("2 FOR 1", "BUY 1 GET 1 FREE", "BOGO", "MIX & MATCH").
+    /// That's information about prices, never a purchase of its own.
+    static func isDeal(_ text: String) -> Bool {
+        let length = (text as NSString).length
+        let withoutCodes = dealCodePattern.stringByReplacingMatches(
+            in: text, options: [], range: NSRange(location: 0, length: length), withTemplate: " ")
+        let letterWords = words(in: withoutCodes).filter { word in word.rangeOfCharacter(from: .letters) != nil }
+        guard letterWords.allSatisfy({ word in dealWords.contains(word) }) else {
+            return false
+        }
+        if dealCodePattern.hasMatch(in: text) || countForCountPattern.hasMatch(in: text) {
+            return true
+        }
+        let set = Set(letterWords)
+        return set.contains("BOGO") || set.contains("BOGOF") || set.contains("MULTIBUY")
+            || (set.contains("BUY") && set.contains("GET")) || (set.contains("MIX") && set.contains("MATCH"))
+    }
+
+    /// True if the line is only a department heading, like "PRODUCE" or "21-GROCERY".
+    static func isHeading(_ text: String) -> Bool {
+        let letterWords = words(in: text).filter { word in word.rangeOfCharacter(from: .letters) != nil }
+        guard !letterWords.isEmpty else {
+            return false
+        }
+        return letterWords.allSatisfy { word in headingWords.contains(word) }
+    }
+
+    /// Runs of single letters joined into one word, so "H.S.T." reads as "HST" and "G S T" as "GST".
+    static func joiningInitials(_ words: [String]) -> [String] {
+        var result: [String] = []
+        var run = ""
+        func flush() {
+            if !run.isEmpty {
+                result.append(run)
+                run = ""
+            }
+        }
+        for (index, word) in words.enumerated() {
+            let isInitial = word.count == 1 && word.rangeOfCharacter(from: .letters) != nil
+            let nextIsInitial = index + 1 < words.count && words[index + 1].count == 1
+                && words[index + 1].rangeOfCharacter(from: .letters) != nil
+            if isInitial && (!run.isEmpty || nextIsInitial) {
+                run += word
+            } else {
+                flush()
+                result.append(word)
+            }
+        }
+        flush()
+        return result
     }
 
     /// True if `text` (what comes before a price) has no item name of its own:
