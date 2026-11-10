@@ -10,7 +10,7 @@ enum ScanAutofill {
         var autofilled: Set<ReceiptField> = []
         var unreadable: Set<ReceiptField> = []
 
-        let merchant = parsed.merchant ?? ""
+        let merchant = CategoryGuesser.repairedName(parsed.merchant ?? "")
         if merchant.isEmpty {
             unreadable.insert(.merchant)
         } else {
@@ -191,7 +191,54 @@ enum CategoryGuesser {
         return nil
     }
 
+    /// Letter pairs OCR reads for one letter: "Cinerna" is "Cinema", "vvine" is "wine".
+    private static let ocrConfusions: [(String, String)] = [("rn", "m"), ("vv", "w")]
+
+    /// The category a keyword in the text names. When nothing matches, tries again with
+    /// common OCR confusions undone ("REVUE CINERNA" is a cinema).
     private static func match(_ text: String) -> SpendCategory? {
+        if let category = exactMatch(text) {
+            return category
+        }
+        var repaired = text.lowercased()
+        for (misread, letter) in ocrConfusions {
+            repaired = repaired.replacingOccurrences(of: misread, with: letter)
+        }
+        guard repaired != text.lowercased() else {
+            return nil
+        }
+        return exactMatch(repaired)
+    }
+
+    /// A store name with OCR confusions undone in words that become a category keyword:
+    /// "Revue Cinerna" reads "Revue Cinema". Other words are left as printed.
+    static func repairedName(_ name: String) -> String {
+        let words = name.components(separatedBy: " ")
+        let repaired = words.map { word -> String in
+            let lowered = word.lowercased()
+            guard lowered.count >= 4, exactMatch(lowered) == nil else {
+                return word
+            }
+            var fixed = lowered
+            for (misread, letter) in ocrConfusions {
+                fixed = fixed.replacingOccurrences(of: misread, with: letter)
+            }
+            guard fixed != lowered, exactMatch(fixed) != nil,
+                  fixed.allSatisfy({ character in character.isLetter }) else {
+                return word
+            }
+            if word == word.uppercased() {
+                return fixed.uppercased()
+            }
+            if let first = word.first, first.isUppercase {
+                return fixed.prefix(1).uppercased() + fixed.dropFirst()
+            }
+            return fixed
+        }
+        return repaired.joined(separator: " ")
+    }
+
+    private static func exactMatch(_ text: String) -> SpendCategory? {
         let lowered = text.lowercased()
         guard !lowered.isEmpty else {
             return nil

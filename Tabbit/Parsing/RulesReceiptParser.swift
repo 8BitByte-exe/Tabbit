@@ -164,6 +164,11 @@ struct RulesReceiptParser {
             notes.append("Worked out \(computed.count) prices from their quantity and unit price.")
         }
         let items = counted.map { candidate in candidate.item }
+        if total == nil && subtotal == nil && tax == nil && tip == nil,
+           let only = RulesReceiptParser.singleAmountTotal(of: items) {
+            total = only
+            notes.append(RulesReceiptParser.singleAmountNote)
+        }
         let merchant = RulesReceiptParser.findMerchant(in: lines)
         let texts = lines.map { line in line.text }
         let date = ReceiptDateParser.firstDate(in: texts)
@@ -184,6 +189,17 @@ struct RulesReceiptParser {
             notes: notes
         )
     }
+
+    /// A card slip or ticket that prints one amount ("Amount: $13.50") and no subtotal, tax or
+    /// total: that amount is what was paid. Nil unless there's exactly one positive item.
+    static func singleAmountTotal(of items: [ReceiptLineItem]) -> Decimal? {
+        guard items.count == 1, let amount = items.first?.amount, amount > 0 else {
+            return nil
+        }
+        return amount
+    }
+
+    static let singleAmountNote = "Only one amount is printed, so it's the total."
 
     // MARK: - Lines
 

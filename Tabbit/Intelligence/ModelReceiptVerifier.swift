@@ -399,6 +399,11 @@ enum ModelReceiptVerifier {
             parser: .appleIntelligence,
             notes: []
         )
+        if receipt.total == nil && receipt.subtotal == nil && receipt.tax == nil && receipt.tip == nil,
+           let only = RulesReceiptParser.singleAmountTotal(of: items) {
+            receipt.total = only
+            notes.append(RulesReceiptParser.singleAmountNote)
+        }
         let addsUp = !ReceiptValidator.checks(for: receipt).contains(where: { check in !check.passed })
             && receipt.total != nil
         receipt.notes = [addsUp ? usedNote : usedUncheckedNote] + notes
