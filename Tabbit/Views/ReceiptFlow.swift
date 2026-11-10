@@ -43,6 +43,9 @@ final class ReceiptFlow: ObservableObject {
 
     /// The group new receipts go into (nil = My Receipts).
     private(set) var targetGroupID: UUID?
+    /// The business (Work) new receipts go into, and its job. Never set with a group.
+    private(set) var targetBusinessID: UUID?
+    private(set) var targetJobID: UUID?
     /// Picked in the source sheet; acted on once that sheet has closed.
     private var pendingSource: Source?
 
@@ -57,8 +60,28 @@ final class ReceiptFlow: ObservableObject {
     /// Opens the source sheet for a new receipt in a group (or My Receipts).
     func addReceipt(to groupID: UUID?) {
         self.targetGroupID = groupID
+        self.targetBusinessID = nil
+        self.targetJobID = nil
         self.phase = .idle
         self.isChoosingSource = true
+    }
+
+    /// Opens the source sheet for a business's new receipt (an expense), optionally for one job.
+    func addReceipt(toBusiness businessID: UUID, job jobID: UUID?) {
+        self.targetGroupID = nil
+        self.targetBusinessID = businessID
+        self.targetJobID = jobID
+        self.phase = .idle
+        self.isChoosingSource = true
+    }
+
+    /// Puts a new receipt where it was added from: a group, a business (and job), or My Receipts.
+    private func placed(_ record: ReceiptRecord) -> ReceiptRecord {
+        var copy = record
+        copy.groupID = targetGroupID
+        copy.businessID = targetGroupID == nil ? targetBusinessID : nil
+        copy.jobID = copy.businessID == nil ? nil : targetJobID
+        return copy
     }
 
     /// Called by the source sheet. The next step starts when the sheet has closed,
@@ -81,7 +104,7 @@ final class ReceiptFlow: ObservableObject {
             photoSelection = []
             isShowingPhotoPicker = true
         case .manual:
-            let record = ReceiptRecord(groupID: targetGroupID, paidBy: Person.meID, source: .manual)
+            let record = placed(ReceiptRecord(paidBy: Person.meID, source: .manual))
             session = EditorSession(record: record, pageJPEGs: [], thumbnailJPEG: nil, isNew: true)
         }
     }
@@ -189,7 +212,7 @@ final class ReceiptFlow: ObservableObject {
                     processed = await ReceiptIntelligence.refine(processed, warmup: warmup)
                     self.isUsingIntelligence = false
                 }
-                let record = ScanAutofill.record(from: processed, source: source, groupID: groupID)
+                let record = self.placed(ScanAutofill.record(from: processed, source: source, groupID: groupID))
                 self.phase = .idle
                 self.session = EditorSession(record: record, pageJPEGs: processed.pageJPEGs,
                                              thumbnailJPEG: processed.thumbnailJPEG, isNew: true)

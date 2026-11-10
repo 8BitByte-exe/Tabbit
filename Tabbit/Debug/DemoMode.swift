@@ -6,7 +6,8 @@ import UIKit
 ///
 /// Launch arguments: `-TabbitDemo -TabbitScreen <screen>`, where screen is one of
 /// groups, group, swipe, receipt, settle, edit, category, add, mine, sort, map, mappin, mapfix, mapoff,
-/// groupmap, profile, profileedit, settings, whatsnew, processing, dialog or empty. Sample data goes into a throwaway folder, never the real store.
+/// groupmap, profile, profileedit, settings, whatsnew, processing, dialog, work, business, invoices, expenses,
+/// job, invoice, workempty or empty. Sample data goes into a throwaway folder, never the real store.
 enum DemoMode {
 
     static var isEnabled: Bool {
@@ -44,6 +45,11 @@ enum DemoMode {
     private static let flatID = id(101)
     private static let dinnerID = id(102)
     static let timeOutID = id(200)
+    static let studioID = id(300)
+    private static let brandJobID = id(301)
+    private static let websiteJobID = id(302)
+    private static let menuJobID = id(303)
+    static let overdueInvoiceID = id(310)
 
     private static func daysAgo(_ days: Int) -> Date {
         let today = Calendar.current.startOfDay(for: Date())
@@ -155,6 +161,54 @@ enum DemoMode {
         }
 
         store.markPaid(Transfer(from: casey.id, to: me.id, cents: 4000), in: lisbonID)
+
+        if screen != "workempty" {
+            populateWork(store)
+        }
+    }
+
+    /// A freelance studio with three jobs, five invoices (one overdue, one waiting) and some expenses.
+    @MainActor
+    private static func populateWork(_ store: TabbitStore) {
+        let jobs = [
+            Job(id: brandJobID, name: "Brand refresh", client: "Northwind Coffee", startDate: daysAgo(20)),
+            Job(id: websiteJobID, name: "Website rebuild", client: "Harbor Dental", startDate: daysAgo(90)),
+            Job(id: menuJobID, name: "Menu design", client: "Trattoria Roma", startDate: daysAgo(130), isFinished: true),
+        ]
+        func invoice(_ number: String, _ job: UUID, _ client: String, _ amountText: String, sent: Int,
+                     dueAfter: Int, paid: Int?, id invoiceID: UUID = UUID()) -> Invoice {
+            let issued = daysAgo(sent)
+            return Invoice(id: invoiceID, jobID: job, number: number, client: client, amount: amount(amountText),
+                           issueDate: issued,
+                           dueDate: Calendar.current.date(byAdding: .day, value: dueAfter, to: issued),
+                           paidDate: paid.map { days in daysAgo(days) })
+        }
+        let invoices = [
+            invoice("INV-0007", brandJobID, "Northwind Coffee", "2400.00", sent: 6, dueAfter: 30, paid: nil),
+            invoice("INV-0006", websiteJobID, "Harbor Dental", "3800.00", sent: 45, dueAfter: 30, paid: nil,
+                    id: overdueInvoiceID),
+            invoice("INV-0005", websiteJobID, "Harbor Dental", "1900.00", sent: 80, dueAfter: 30, paid: 62),
+            invoice("INV-0004", menuJobID, "Trattoria Roma", "650.00", sent: 120, dueAfter: 14, paid: 110),
+            invoice("INV-0003", brandJobID, "Northwind Coffee", "1200.00", sent: 160, dueAfter: 30, paid: 150),
+        ]
+        store.save(Business(id: studioID, name: "Sam Rivera Design", kind: .freelance, colorIndex: 6,
+                            jobs: jobs, invoices: invoices, taxSetAsidePercent: amount("25")))
+
+        let expenses = [
+            ReceiptRecord(businessID: studioID, jobID: brandJobID, merchant: "Office Depot", date: daysAgo(4),
+                          category: .shopping,
+                          items: [item("Sketch paper", "18.40"), item("Markers", "42.60"), item("Foam board", "23.20")],
+                          tax: amount("6.74")),
+            ReceiptRecord(businessID: studioID, merchant: "Adobe", date: daysAgo(9), category: .subscriptions,
+                          total: amount("59.99")),
+            ReceiptRecord(businessID: studioID, jobID: websiteJobID, merchant: "Shell", date: daysAgo(30),
+                          category: .fuel, total: amount("52.10")),
+            ReceiptRecord(businessID: studioID, jobID: menuJobID, merchant: "Print Shop", date: daysAgo(115),
+                          category: .shopping, total: amount("126.00")),
+        ]
+        for record in expenses {
+            _ = try? store.add(record)
+        }
     }
 
     private static func notFound(_ record: ReceiptRecord) -> ReceiptRecord {
@@ -190,6 +244,14 @@ enum DemoMode {
             router.tab = .map
         case "groupmap":
             router.groupsPath = [.group(lisbonID), .map(lisbonID)]
+        case "work", "workempty":
+            router.tab = .work
+        case "business", "invoices", "expenses", "invoice":
+            router.tab = .work
+            router.workPath = [.business(studioID)]
+        case "job":
+            router.tab = .work
+            router.workPath = [.business(studioID), .job(websiteJobID, business: studioID)]
         case "profile", "profileedit":
             router.tab = .profile
         case "settings":

@@ -162,7 +162,7 @@ jobs:
           mkdir -p screenshots
           for appearance in light dark; do
             xcrun simctl ui "$UDID" appearance "$appearance"
-            for screen in groups group swipe receipt settle edit category add mine sort map mappin mapfix mapoff groupmap profile profileedit settings whatsnew processing dialog empty; do
+            for screen in groups group swipe receipt settle edit category add mine sort map mappin mapfix mapoff groupmap profile profileedit settings whatsnew processing dialog work business invoices expenses job invoice workempty empty; do
               xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
               xcrun simctl launch "$UDID" "$BUNDLE_ID" -TabbitDemo -TabbitScreen "$screen"
               sleep 5

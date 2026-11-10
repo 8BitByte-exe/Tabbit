@@ -8,6 +8,8 @@ import UIKit
 /// - `profile.json`: me
 /// - `groups.json`: groups, members and recorded payments
 /// - `<receipt id>/receipt.json`, `page-1.jpg`, `page-2.jpg`, …, `thumbnail.jpg`
+/// - `work.json`: businesses with their jobs and invoices (Work)
+/// - `Work/<invoice id>.pdf`: invoices attached to them
 ///
 /// The folder is excluded from iCloud Backup (the owner chose device-only) and
 /// files use complete data protection (encrypted whenever the phone is locked).
@@ -18,6 +20,8 @@ final class TabbitStore: ObservableObject {
     @Published private(set) var me: Person = Person.makeMe()
     /// Newest first.
     @Published private(set) var groups: [SplitGroup] = []
+    /// Work: oldest first, so the first business set up stays at the top.
+    @Published var businesses: [Business] = []
     /// Newest first (by date, then when added).
     @Published private(set) var receipts: [ReceiptRecord] = []
     /// Receipt files that couldn't be read. They stay on disk, untouched.
@@ -33,8 +37,8 @@ final class TabbitStore: ObservableObject {
     private static let thumbnailFileName = "thumbnail.jpg"
     private static let groupsFileName = "groups.json"
     private static let profileFileName = "profile.json"
-    private static let protection: [FileAttributeKey: Any] = [.protectionKey: FileProtectionType.complete]
-    private static let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
+    static let protection: [FileAttributeKey: Any] = [.protectionKey: FileProtectionType.complete]
+    static let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]
 
     init(folder: URL = TabbitStore.defaultFolder()) {
         self.folder = folder
@@ -62,9 +66,14 @@ final class TabbitStore: ObservableObject {
         return receipts.first { receipt in receipt.id == id }
     }
 
-    /// Receipts in a group, or My Receipts for nil. Newest first.
+    /// Receipts in a group, or My Receipts for nil (not in a group or a business). Newest first.
     func receipts(in groupID: UUID?) -> [ReceiptRecord] {
-        return receipts.filter { receipt in receipt.groupID == groupID }
+        return receipts.filter { receipt in receipt.groupID == groupID && receipt.businessID == nil }
+    }
+
+    /// Personal receipts: everything except a business's expenses (for the profile's spending).
+    var personalReceipts: [ReceiptRecord] {
+        return receipts.filter { receipt in receipt.businessID == nil }
     }
 
     /// The people a receipt can be split between.
@@ -261,6 +270,8 @@ final class TabbitStore: ObservableObject {
             return
         }
         record.groupID = groupID
+        record.businessID = nil
+        record.jobID = nil
         do {
             try update(record)
         } catch {
@@ -334,6 +345,7 @@ final class TabbitStore: ObservableObject {
            let stored = try? decoder.decode([SplitGroup].self, from: data) {
             groups = stored.sorted { first, second in first.updatedAt > second.updatedAt }
         }
+        loadWork()
 
         var loaded: [ReceiptRecord] = []
         var unreadable = 0
@@ -390,7 +402,7 @@ final class TabbitStore: ObservableObject {
         }
     }
 
-    private func replaceInMemory(_ record: ReceiptRecord) {
+    func replaceInMemory(_ record: ReceiptRecord) {
         if let index = receipts.firstIndex(where: { candidate in candidate.id == record.id }) {
             receipts[index] = record
         }
@@ -403,7 +415,7 @@ final class TabbitStore: ObservableObject {
         }
     }
 
-    private func write(_ record: ReceiptRecord) throws {
+    func write(_ record: ReceiptRecord) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(record)

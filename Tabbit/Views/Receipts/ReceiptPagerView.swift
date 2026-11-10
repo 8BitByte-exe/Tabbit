@@ -6,6 +6,9 @@ import UIKit
 struct ReceiptPagerView: View {
     let startID: UUID
     let groupID: UUID?
+    /// A business's receipts (Work) instead of a group's, optionally one job's.
+    var businessID: UUID?
+    var jobID: UUID?
 
     @EnvironmentObject private var store: TabbitStore
     @EnvironmentObject private var flow: ReceiptFlow
@@ -17,13 +20,18 @@ struct ReceiptPagerView: View {
     @State private var shareFile: ShareFile?
     @State private var toast: String?
 
-    init(startID: UUID, groupID: UUID?) {
+    init(startID: UUID, groupID: UUID?, businessID: UUID? = nil, jobID: UUID? = nil) {
         self.startID = startID
         self.groupID = groupID
+        self.businessID = businessID
+        self.jobID = jobID
         _selection = State(initialValue: startID)
     }
 
     private var receipts: [ReceiptRecord] {
+        if let businessID = businessID {
+            return store.receipts(inBusiness: businessID, job: jobID)
+        }
         return store.receipts(in: groupID)
     }
 

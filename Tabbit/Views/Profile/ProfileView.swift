@@ -10,7 +10,7 @@ struct ProfileView: View {
     @State private var editingProfile = false
 
     var body: some View {
-        let stats = SpendingStats.compute(receipts: store.receipts, groups: store.groups)
+        let stats = SpendingStats.compute(receipts: store.personalReceipts, groups: store.groups)
         return ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                 header

@@ -77,6 +77,14 @@ struct RootView: View {
                         }
                 }
             }
+            tab(.work) {
+                NavigationStack(path: $router.workPath) {
+                    WorkView()
+                        .navigationDestination(for: Route.self) { route in
+                            RouteView(route: route)
+                        }
+                }
+            }
             tab(.map) {
                 NavigationStack(path: $router.mapPath) {
                     ReceiptMapView(groupID: nil)
@@ -217,6 +225,12 @@ struct RouteView: View {
             ReceiptPagerView(startID: id, groupID: groupID)
         case .settleUp(let id):
             SettleUpView(groupID: id)
+        case .business(let id):
+            BusinessDetailView(businessID: id)
+        case .job(let id, let businessID):
+            JobDetailView(jobID: id, businessID: businessID)
+        case .workReceipt(let id, let businessID, let jobID):
+            ReceiptPagerView(startID: id, groupID: nil, businessID: businessID, jobID: jobID)
         case .map(let id):
             ReceiptMapView(groupID: id)
         case .settings:
@@ -241,7 +255,7 @@ struct ClayTabBar: View {
         }
         .padding(Theme.Spacing.s)
         .clayRaised(cornerRadius: Theme.Size.tabBarHeight / 2, elevation: Theme.Elevations.floating)
-        .padding(.horizontal, 52)
+        .padding(.horizontal, 36)
     }
 
     private func button(for tab: AppTab) -> some View {
