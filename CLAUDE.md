@@ -118,7 +118,7 @@ Tabbit/
                                cheapest unique set of changes that makes them add up wins
     ReceiptKeywords.swift      line roles with OCR-tolerant keywords (SJETOTAL → SUBTOTAL, TIP/GRATUITY),
                                included tax, discounts, rounding; German/Spanish/French/Italian/Dutch words
-    AmountParser.swift         money amounts at the end of a line
+    AmountParser.swift         money amounts at the end of a line; partly unreadable prices (DamagedAmount)
     LineAmountParser.swift     quantity and unit price ("2 @ 1.99", "2 BANANAS 1.99/EA", "1.25 LB @ 0.99"),
                                worked-out line totals, the other reading ("1.99" each or for both), "2× " names
     ReceiptDetailsParser.swift time of purchase, store address (street + city/postal lines), payment method
@@ -247,6 +247,7 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Deals ("2 FOR 1", "BUY 1 GET 1", "MIX & MATCH", "B1G1") describe prices and are never items; one with money off ("FREE", "GET") is a discount.
   - Sanity checks: tax is always less than the total (and rarely over 30% of it); a printed rate ("HST 13%") confirms a tax; tips are usually 10/15/18/20% of the bill before or after tax; a card payment, or cash minus change, confirms the total and stands in for one that couldn't be read.
   - Fix OCR misreads with general tools, never a rule per mistake (owner's instruction after "Cinerna"). `OCRSpelling` is an edit distance where look-alike letters (rn/m, 0/O, 1/l, 5/S…) are cheap; the store name is repaired from the iPhone's dictionary (`UITextChecker`, on-device) only when one look-alike swap explains the difference, and the model's corrected store name counts as on the scan when it's a look-alike of it.
+  - A price OCR could only partly read ("$24.9îŚ" for $24.99) isn't dropped: `AmountParser.damagedAmount` keeps the digits it could read, and `RulesReceiptParser.analyze` fills in the rest from the arithmetic (the subtotal, or total less tax, minus the other prices) when that fits, else by digit shape ("S" for 5). Both readers see the filled-in price, and the editor shows a Check mark on the items.
   - Card slips and stubs ("Amount: $13.50", no products) have no items, only a total (`RulesReceiptParser.isPaymentSlip`, the model's `isItemized`).
   - All-number dates are read every way they can be (month/day/year, day/month/year, two-digit year first) and the usual reading wins unless it's long ago or in the future and another reading is from the last year: "26-11-08" scanned in November 2026 is 2026-11-08.
   - When Tabbit isn't sure, it says so: `ReceiptRecord.checks` (`FieldCheck`, with a reason) shows a "Check" mark in the editor for a repaired store name, an ambiguous or far-off date, a category only Apple Intelligence or the items suggested, or totals that don't add up. Editing the field or saving clears it.

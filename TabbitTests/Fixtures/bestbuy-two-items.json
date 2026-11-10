@@ -1,0 +1,567 @@
+{
+  "appVersion": "1.2.0",
+  "corrected": {
+    "date": {
+      "day": 4,
+      "month": 11,
+      "year": 2026
+    },
+    "lineItems": [
+      {
+        "amount": "34.99",
+        "confidence": 0.86795914,
+        "name": "Tuff8 Clear"
+      }
+    ],
+    "location": "100 Main St., Unit 1",
+    "merchant": "Best Buy",
+    "notes": [
+      "Read with Apple Intelligence on this iPhone. Every amount comes from the scan, but they don't all add up, so check them."
+    ],
+    "parser": "appleIntelligence",
+    "paymentMethod": "Interac",
+    "subtotal": "34.99",
+    "tax": "7.8",
+    "time": {
+      "hour": 12,
+      "minute": 23
+    },
+    "total": "67.78"
+  },
+  "exportedAt": "2026-11-10T05:11:03Z",
+  "format": "tabbit-scan",
+  "languageCorrection": false,
+  "parsed": {
+    "date": {
+      "day": 4,
+      "month": 11,
+      "year": 2026
+    },
+    "intelligence": {
+      "category": "electronics",
+      "date": "2026-04-11",
+      "isItemized": true,
+      "labels": [
+        "[1] item: TUFF8 S26FE Clear $34.99 → Tuff8 Clear",
+        "[2] discount: NO INSTALL INVISISHI $0.00 → Approved price override",
+        "[3] subtotal: SUBTOTAL $59.98",
+        "[4] tax: TAX HST 13.00名 of $59.98 $7.80 → HST 13%",
+        "[5] total: TOTAL $67.78"
+      ],
+      "outcome": "used",
+      "photo": "890×896, 2 section(s), 5.9 s",
+      "pricesIncludeTax": true,
+      "readSeconds": 1.5057100057601929,
+      "reader": "documents",
+      "seconds": 5.873961925506592,
+      "storeName": "Best Buy"
+    },
+    "lineItems": [
+      {
+        "amount": "34.99",
+        "confidence": 0.86795914,
+        "name": "Tuff8 Clear"
+      }
+    ],
+    "location": "100 Main St., Unit 1",
+    "merchant": "Best Buy",
+    "notes": [
+      "Read with Apple Intelligence on this iPhone. Every amount comes from the scan, but they don't all add up, so check them."
+    ],
+    "parser": "appleIntelligence",
+    "paymentMethod": "Interac",
+    "subtotal": "59.98",
+    "tax": "7.8",
+    "time": {
+      "hour": 12,
+      "minute": 23
+    },
+    "total": "67.78"
+  },
+  "redacted": true,
+  "scan": {
+    "blocks": [
+      {
+        "confidence": 0.984,
+        "height": 0.0323,
+        "page": 0,
+        "text": "BEST",
+        "width": 0.4282,
+        "x": 0.272,
+        "y": 0.8865
+      },
+      {
+        "confidence": 0.582,
+        "height": 0.0378,
+        "page": 0,
+        "text": "BUYă",
+        "width": 0.4444,
+        "x": 0.2944,
+        "y": 0.8503
+      },
+      {
+        "confidence": 0.947,
+        "height": 0.0116,
+        "page": 0,
+        "text": "Open more this holiday season.",
+        "width": 0.5056,
+        "x": 0.1611,
+        "y": 0.7994
+      },
+      {
+        "confidence": 0.868,
+        "height": 0.0104,
+        "page": 0,
+        "text": "100 Main St., Unit 1",
+        "width": 0.3722,
+        "x": 0.2278,
+        "y": 0.7863
+      },
+      {
+        "confidence": 0.989,
+        "height": 0.0101,
+        "page": 0,
+        "text": "Burlington",
+        "width": 0.1733,
+        "x": 0.3272,
+        "y": 0.7723
+      },
+      {
+        "confidence": 0.902,
+        "height": 0.0116,
+        "page": 0,
+        "text": "S-###",
+        "width": 0.0889,
+        "x": 0.1111,
+        "y": 0.7384
+      },
+      {
+        "confidence": 0.922,
+        "height": 0.0087,
+        "page": 0,
+        "text": "T-####",
+        "width": 0.1,
+        "x": 0.1167,
+        "y": 0.7282
+      },
+      {
+        "confidence": 0.817,
+        "height": 0.0116,
+        "page": 0,
+        "text": "R-1",
+        "width": 0.0667,
+        "x": 0.2778,
+        "y": 0.7413
+      },
+      {
+        "confidence": 0.953,
+        "height": 0.0149,
+        "page": 0,
+        "text": "BUS.DATE-11/04/2026",
+        "width": 0.3363,
+        "x": 0.454,
+        "y": 0.7394
+      },
+      {
+        "confidence": 0.984,
+        "height": 0.0113,
+        "page": 0,
+        "text": "Staff",
+        "width": 0.0839,
+        "x": 0.4578,
+        "y": 0.7276
+      },
+      {
+        "confidence": 0.972,
+        "height": 0.0176,
+        "page": 0,
+        "text": "SALE",
+        "width": 0.1446,
+        "x": 0.3443,
+        "y": 0.6918
+      },
+      {
+        "confidence": 0.953,
+        "height": 0.012,
+        "page": 0,
+        "text": "TUFF8 S26FE Clear",
+        "width": 0.2889,
+        "x": 0.0556,
+        "y": 0.6538
+      },
+      {
+        "confidence": 0.974,
+        "height": 0.0104,
+        "page": 0,
+        "text": "########",
+        "width": 0.1447,
+        "x": 0.0554,
+        "y": 0.6409
+      },
+      {
+        "confidence": 0.868,
+        "height": 0.012,
+        "page": 0,
+        "text": "$34.99",
+        "width": 0.1167,
+        "x": 0.6722,
+        "y": 0.6511
+      },
+      {
+        "confidence": 0.701,
+        "height": 0.0087,
+        "page": 0,
+        "text": "H",
+        "width": 0.0278,
+        "x": 0.7611,
+        "y": 0.6395
+      },
+      {
+        "confidence": 0.937,
+        "height": 0.0138,
+        "page": 0,
+        "text": "S26FE/25 IS GL ELITE",
+        "width": 0.3402,
+        "x": 0.0549,
+        "y": 0.6103
+      },
+      {
+        "confidence": 0.968,
+        "height": 0.0102,
+        "page": 0,
+        "text": "########",
+        "width": 0.1389,
+        "x": 0.0611,
+        "y": 0.5988
+      },
+      {
+        "confidence": 0.911,
+        "height": 0.0087,
+        "page": 0,
+        "text": "$24.9îŚ",
+        "width": 0.1111,
+        "x": 0.6778,
+        "y": 0.6105
+      },
+      {
+        "confidence": 0.828,
+        "height": 0.0102,
+        "page": 0,
+        "text": "H",
+        "width": 0.0278,
+        "x": 0.7667,
+        "y": 0.5959
+      },
+      {
+        "confidence": 0.956,
+        "height": 0.0148,
+        "page": 0,
+        "text": "Approved price override $15.00 Off (39.99-15.00)",
+        "width": 0.7956,
+        "x": 0.1105,
+        "y": 0.5798
+      },
+      {
+        "confidence": 0.936,
+        "height": 0.0119,
+        "page": 0,
+        "text": "NO INSTALL INVISISHI",
+        "width": 0.3349,
+        "x": 0.0659,
+        "y": 0.5557
+      },
+      {
+        "confidence": 0.977,
+        "height": 0.0105,
+        "page": 0,
+        "text": "########",
+        "width": 0.1447,
+        "x": 0.0665,
+        "y": 0.5435
+      },
+      {
+        "confidence": 0.982,
+        "height": 0.0087,
+        "page": 0,
+        "text": "$0.00",
+        "width": 0.0944,
+        "x": 0.7,
+        "y": 0.5538
+      },
+      {
+        "confidence": 0.838,
+        "height": 0.0129,
+        "page": 0,
+        "text": "3 Sale iten(s)",
+        "width": 0.2312,
+        "x": 0.0814,
+        "y": 0.5149
+      },
+      {
+        "confidence": 0.991,
+        "height": 0.0108,
+        "page": 0,
+        "text": "SUBTOTAL",
+        "width": 0.1307,
+        "x": 0.093,
+        "y": 0.4924
+      },
+      {
+        "confidence": 0.829,
+        "height": 0.0087,
+        "page": 0,
+        "text": "$59.98",
+        "width": 0.1111,
+        "x": 0.6889,
+        "y": 0.4869
+      },
+      {
+        "confidence": 0.99,
+        "height": 0.0087,
+        "page": 0,
+        "text": "SALE",
+        "width": 0.0722,
+        "x": 0.0944,
+        "y": 0.468
+      },
+      {
+        "confidence": 0.883,
+        "height": 0.0104,
+        "page": 0,
+        "text": "TAX HST",
+        "width": 0.1278,
+        "x": 0.0833,
+        "y": 0.4533
+      },
+      {
+        "confidence": 0.986,
+        "height": 0.0189,
+        "page": 0,
+        "text": "TOTAL",
+        "width": 0.1667,
+        "x": 0.0778,
+        "y": 0.4317
+      },
+      {
+        "confidence": 0.921,
+        "height": 0.0128,
+        "page": 0,
+        "text": "13.00名 of $59.98",
+        "width": 0.2636,
+        "x": 0.2933,
+        "y": 0.4497
+      },
+      {
+        "confidence": 0.981,
+        "height": 0.0102,
+        "page": 0,
+        "text": "$7.80",
+        "width": 0.1,
+        "x": 0.7,
+        "y": 0.4462
+      },
+      {
+        "confidence": 0.984,
+        "height": 0.0203,
+        "page": 0,
+        "text": "$67.78",
+        "width": 0.2056,
+        "x": 0.5889,
+        "y": 0.423
+      },
+      {
+        "confidence": 0.988,
+        "height": 0.0116,
+        "page": 0,
+        "text": "Debit",
+        "width": 0.1,
+        "x": 0.0611,
+        "y": 0.3953
+      },
+      {
+        "confidence": 0.971,
+        "height": 0.014,
+        "page": 0,
+        "text": "ACCOUNT#:******####",
+        "width": 0.3196,
+        "x": 0.0652,
+        "y": 0.379
+      },
+      {
+        "confidence": 0.895,
+        "height": 0.0145,
+        "page": 0,
+        "text": "AUTH#: ######Í",
+        "width": 0.2149,
+        "x": 0.0538,
+        "y": 0.3645
+      },
+      {
+        "confidence": 0.921,
+        "height": 0.0118,
+        "page": 0,
+        "text": "CHANGE DUE",
+        "width": 0.178,
+        "x": 0.0555,
+        "y": 0.3516
+      },
+      {
+        "confidence": 0.819,
+        "height": 0.0116,
+        "page": 0,
+        "text": "$67.78",
+        "width": 0.1167,
+        "x": 0.6778,
+        "y": 0.3721
+      },
+      {
+        "confidence": 0.907,
+        "height": 0.0104,
+        "page": 0,
+        "text": "$0.00",
+        "width": 0.1,
+        "x": 0.6944,
+        "y": 0.3445
+      },
+      {
+        "confidence": 0.954,
+        "height": 0.0137,
+        "page": 0,
+        "text": "Transaction Record SALE",
+        "width": 0.3909,
+        "x": 0.0599,
+        "y": 0.3208
+      },
+      {
+        "confidence": 0.928,
+        "height": 0.0141,
+        "page": 0,
+        "text": "***#### P DEBIT 67.78",
+        "width": 0.3579,
+        "x": 0.2045,
+        "y": 0.3055
+      },
+      {
+        "confidence": 0.956,
+        "height": 0.0108,
+        "page": 0,
+        "text": "Approved ######",
+        "width": 0.2572,
+        "x": 0.0547,
+        "y": 0.2946
+      },
+      {
+        "confidence": 0.983,
+        "height": 0.0087,
+        "page": 0,
+        "text": "DEFAULT",
+        "width": 0.1278,
+        "x": 0.0556,
+        "y": 0.2834
+      },
+      {
+        "confidence": 0.935,
+        "height": 0.0117,
+        "page": 0,
+        "text": "SEQ NO: ############",
+        "width": 0.35,
+        "x": 0.05,
+        "y": 0.2674
+      },
+      {
+        "confidence": 0.911,
+        "height": 0.0134,
+        "page": 0,
+        "text": "ACI/ISO: 001/00",
+        "width": 0.2614,
+        "x": 0.0499,
+        "y": 0.2513
+      },
+      {
+        "confidence": 0.947,
+        "height": 0.0141,
+        "page": 0,
+        "text": "11/04/2026 12:23:12",
+        "width": 0.335,
+        "x": 0.0436,
+        "y": 0.2367
+      },
+      {
+        "confidence": 0.941,
+        "height": 0.0138,
+        "page": 0,
+        "text": "AID: A#############",
+        "width": 0.3404,
+        "x": 0.0326,
+        "y": 0.2222
+      },
+      {
+        "confidence": 0.916,
+        "height": 0.0136,
+        "page": 0,
+        "text": "APN: Interac",
+        "width": 0.2278,
+        "x": 0.0278,
+        "y": 0.2076
+      },
+      {
+        "confidence": 0.931,
+        "height": 0.012,
+        "page": 0,
+        "text": "TVR: ##########",
+        "width": 0.2778,
+        "x": 0.0278,
+        "y": 0.1946
+      },
+      {
+        "confidence": 0.947,
+        "height": 0.012,
+        "page": 0,
+        "text": "NO SIGNATURE REQUIRED",
+        "width": 0.3778,
+        "x": 0.0278,
+        "y": 0.1815
+      },
+      {
+        "confidence": 0.941,
+        "height": 0.009,
+        "page": 0,
+        "text": "Need help? Visit: Bestbuy.ca/Contact-Us",
+        "width": 0.6667,
+        "x": 0.0333,
+        "y": 0.1451
+      },
+      {
+        "confidence": 0.936,
+        "height": 0.0103,
+        "page": 0,
+        "text": "For full details on cellular/vireless",
+        "width": 0.6222,
+        "x": 0.0389,
+        "y": 0.1103
+      },
+      {
+        "confidence": 0.944,
+        "height": 0.0088,
+        "page": 0,
+        "text": "device returns please ask an in-store",
+        "width": 0.6222,
+        "x": 0.0389,
+        "y": 0.0988
+      },
+      {
+        "confidence": 0.915,
+        "height": 0.0092,
+        "page": 0,
+        "text": "aduisor or visit Bestbuy.ca",
+        "width": 0.4611,
+        "x": 0.0389,
+        "y": 0.087
+      }
+    ],
+    "pageCount": 1,
+    "reader": "documents",
+    "seconds": 1.5057100057601929
+  },
+  "version": 1
+}

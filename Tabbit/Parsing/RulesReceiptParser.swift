@@ -161,6 +161,7 @@ struct RulesReceiptParser {
         }
 
         let counted = candidates.filter { candidate in candidate.included }
+        notes.append(contentsOf: RulesReceiptParser.repairNotes(in: lines))
         let computed = counted.filter { candidate in candidate.isComputed }
         if computed.count == 1, let line = computed.first {
             notes.append("Worked out the price of \"\(line.label)\" from its quantity and unit price.")
@@ -233,17 +234,116 @@ struct RulesReceiptParser {
     /// The receipt's lines with their roles, amounts and where the amounts sit.
     static func analyze(_ textLines: [TextLine]) -> [AnalyzedLine] {
         var lines = textLines.map { line in AnalyzedLine(line) }
+        markPriceColumn(&lines, textLines)
+        if repairDamagedPrices(&lines) {
+            markPriceColumn(&lines, textLines)
+        }
+        return lines
+    }
+
+    private static func markPriceColumn(_ lines: inout [AnalyzedLine], _ textLines: [TextLine]) {
         let columns = ReceiptLayout.inPriceColumn(textLines, hasAmount: lines.map { line in line.amount != nil })
         for index in lines.indices where index < columns.count {
             lines[index].inPriceColumn = columns[index]
         }
-        return lines
+    }
+
+    /// Notes about item prices that were partly unreadable start with this.
+    static let repairedPricePrefix = "Part of a price was unreadable"
+
+    /// Item prices whose last digits OCR garbled ("$24.9îŚ"). With one such price among the
+    /// items, the receipt's own arithmetic says what it is: the subtotal (or the total less
+    /// tax) minus the other prices, if that fits the digits that could be read (24.90–24.99).
+    /// Otherwise a reading by shape is used ("$4.9S" is 4.95), and failing that the line keeps
+    /// no amount. Returns true if any price was filled in.
+    private static func repairDamagedPrices(_ lines: inout [AnalyzedLine]) -> Bool {
+        let summaryIndex = lines.firstIndex(where: { line in
+            ReceiptLineRole.summaryRoles.contains(line.role) && line.amount != nil
+        }) ?? lines.count
+        let damaged = (0..<summaryIndex).filter { index in lines[index].damaged != nil }
+        guard !damaged.isEmpty else {
+            return false
+        }
+
+        // What the items should add up to.
+        var target: Decimal?
+        let summary = Array(lines[summaryIndex...])
+        if let subtotal = firstAmount(in: summary, role: .subtotal) {
+            target = subtotal
+        } else if let totalLine = summary.first(where: { line in
+            (line.role == .total || line.role == .strongTotal) && line.amount != nil
+        }), let total = totalLine.amount?.value {
+            let tax = firstAmount(in: summary, role: .tax) ?? firstAmount(in: summary, role: .taxTotal) ?? Decimal(0)
+            target = total - tax
+        }
+
+        // The other prices: named lines and money off in the price column.
+        var others = Decimal(0)
+        for index in 0..<summaryIndex where lines[index].damaged == nil && lines[index].inPriceColumn {
+            let line = lines[index]
+            guard let amount = line.amount?.value else {
+                continue
+            }
+            if line.role == .discount {
+                others -= amount < 0 ? -amount : amount
+            } else if line.role == .other {
+                others += amount
+            }
+        }
+
+        var unresolved = damaged
+        if damaged.count > 1 {
+            for index in damaged {
+                guard let found = lines[index].damaged, let value = found.lookAlike else {
+                    continue
+                }
+                fill(&lines[index], value: value, worked: false)
+                others += value
+                unresolved.removeAll { other in other == index }
+            }
+        }
+        for index in unresolved {
+            guard let found = lines[index].damaged else {
+                continue
+            }
+            if unresolved.count == 1, let target = target {
+                let missing = target - others
+                if missing >= found.low && missing <= found.high {
+                    fill(&lines[index], value: missing, worked: true)
+                    continue
+                }
+            }
+            if let value = found.lookAlike {
+                fill(&lines[index], value: value, worked: false)
+            }
+        }
+        return damaged.contains { index in lines[index].amount != nil }
+    }
+
+    private static func fill(_ line: inout AnalyzedLine, value: Decimal, worked: Bool) {
+        guard let found = line.damaged else {
+            return
+        }
+        line.amount = AmountParser.ParsedAmount(value: value, textBefore: found.textBefore)
+        let name = found.textBefore.isEmpty ? "a line" : "\"\(found.textBefore)\""
+        let how = worked ? "worked out as \(MoneyInput.editText(value)) from the other amounts"
+            : "read as \(MoneyInput.editText(value))"
+        line.repairNote = "\(repairedPricePrefix): \(name) shows “\(found.printed)”, so its price was \(how)."
+    }
+
+    /// The notes for prices that were partly unreadable, top to bottom.
+    static func repairNotes(in lines: [AnalyzedLine]) -> [String] {
+        return lines.compactMap { line in line.repairNote }
     }
 
     struct AnalyzedLine {
         let text: String
         let pageIndex: Int
-        let amount: AmountParser.ParsedAmount?
+        var amount: AmountParser.ParsedAmount?
+        /// A price whose last digits OCR couldn't read ("$24.9îŚ"); `analyze` may fill in `amount`.
+        var damaged: AmountParser.DamagedAmount?
+        /// Says how a partly unreadable price was filled in.
+        var repairNote: String?
         /// Quantity, unit price and a second reading of the amount, for lines that may be items.
         let detail: LineAmount?
         let role: ReceiptLineRole
@@ -280,7 +380,11 @@ struct RulesReceiptParser {
                 self.amount = AmountParser.ParsedAmount(value: detail.value, textBefore: detail.textBefore)
             } else {
                 self.detail = nil
-                self.amount = AmountParser.trailingAmount(in: line.text)
+                let trailing = AmountParser.trailingAmount(in: line.text)
+                self.amount = trailing
+                if trailing == nil && RulesReceiptParser.itemRoles.contains(role) && role != .info {
+                    self.damaged = AmountParser.damagedAmount(in: line.text)
+                }
             }
 
             let confidences = line.blocks.map { block in block.confidence }

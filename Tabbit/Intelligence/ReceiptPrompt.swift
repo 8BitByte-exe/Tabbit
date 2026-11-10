@@ -77,6 +77,8 @@ struct NumberedReceipt {
     let entries: [Entry]
     /// The receipt as the prompt shows it.
     let text: String
+    /// How prices that were partly unreadable were filled in (`RulesReceiptParser.repairNotes`).
+    let repairNotes: [String]
 
     init(scan: ScanResult, slopeChoice: Int = 0, maxCharacters: Int = ReceiptPrompt.maxCharacters) {
         self.init(lines: LineGrouper.lines(from: scan, slopeChoice: slopeChoice), maxCharacters: maxCharacters)
@@ -87,6 +89,7 @@ struct NumberedReceipt {
         let analyzed = RulesReceiptParser.analyze(lines)
         let candidates = RulesReceiptParser.itemCandidates(in: analyzed)
         self.candidates = candidates
+        self.repairNotes = RulesReceiptParser.repairNotes(in: analyzed)
         var detailLines: Set<Int> = []
         for candidate in candidates where candidate.isDetail {
             detailLines.insert(candidate.lineIndex)

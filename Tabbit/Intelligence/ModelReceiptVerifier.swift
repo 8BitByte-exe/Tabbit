@@ -422,6 +422,7 @@ enum ModelReceiptVerifier {
                 notes.append(RulesReceiptParser.singleAmountNote)
             }
         }
+        notes.append(contentsOf: numbered.repairNotes)
         let addsUp = !ReceiptValidator.checks(for: receipt).contains(where: { check in !check.passed })
             && receipt.total != nil
         receipt.notes = [addsUp ? usedNote : usedUncheckedNote] + notes

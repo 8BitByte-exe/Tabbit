@@ -70,6 +70,11 @@ enum ScanAutofill {
             break
         }
 
+        // A price the scan could only partly read, filled in from the other amounts.
+        if let repaired = parsed.notes.first(where: { note in note.hasPrefix(RulesReceiptParser.repairedPricePrefix) }) {
+            checks.append(FieldCheck(field: .items, reason: repaired))
+        }
+
         let isPaymentSlip = parsed.notes.contains(RulesReceiptParser.paymentSlipNote)
         if parsed.total != nil && !isPaymentSlip
             && ReceiptValidator.checks(for: parsed).contains(where: { check in !check.passed }) {
