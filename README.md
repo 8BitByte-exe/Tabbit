@@ -1,0 +1,1 @@
+Screenshots for d86ceb7699cbd7e8c0d0541fdcd025dd601b3d07 (feature/business-receipts)
