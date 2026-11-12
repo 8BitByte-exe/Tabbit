@@ -56,7 +56,7 @@ Tabbit/
   Models/
     Person.swift             Person (me has the fixed Person.meID), displayName ("You")
     SplitGroup.swift         a group: name, category, members (me first), settlements
-    ReceiptRecord.swift      a saved receipt: location, time (ClockTime), payment method, SplitItem (assignees,
+    ReceiptRecord.swift      a saved receipt: Personal/Business (ExpenseKind), location, time (ClockTime), payment method, SplitItem (assignees,
                              empty = everyone), TipValue ($/%), autofilled/unreadable marks, raw scan + parser
                              output; place on the map; Settlement
     ReceiptPlace.swift       where a receipt's store is (coordinates from Apple Maps, the query it came from)
@@ -214,6 +214,7 @@ The owner cares a lot about design. Every new screen must use the design system.
 - `ReceiptRecord.parsed` keeps the parser's original output and `scan` the raw OCR, so exports include both `parsed` and the user's `corrected` fields.
 - Removing a person from a group (or moving a receipt) resets payers and assignments that no longer fit (`TabbitStore.clean`). People with recorded payments can't be removed.
 - Money in JSON is text ("7.76") to avoid floating-point drift. Older numeric files still decode.
+- Each receipt is a personal or a business expense (`ReceiptRecord.expense`, `ExpenseKind`, stored as `expense`; missing = personal). That one label is the whole business side (owner's choice, 1.3): no businesses, jobs, invoices or Work page. Files from the unreleased 1.3 Work test build with a `businessID` read as business; that build's `work.json` and `Work/` folder are left on disk untouched.
 
 ## Code rules
 
@@ -295,6 +296,7 @@ The design is tiered and entirely on-device. Each phone gets the best tier it su
    - A Map tab with a pin for every receipt's store, and a map per group (a trip). Tap a pin for its receipts.
    - Places come from the address printed on the receipt (scanning days later is normal, so not GPS), looked up once with Apple Maps after the person opts in. Receipts without an address, or with one Apple Maps couldn't find, are listed with a field to type it; the editor's Location field is the other place to fix it.
    - MapKit can only be tested on the phone and in the CI screenshots; tests use a stand-in `PlaceSearching`.
-7. **Next:** App Store.
+7. **Done (1.3):** personal vs business receipts, for tax time: a Personal/Business switch at the top of the editor, a "Business" pill on rows, a Personal/Business/All filter with the year's business total in My Receipts, a Type column in the CSV and a business-only export. The bigger Work feature (businesses, jobs, invoices, PR #9) was dropped as scope creep.
+8. **Next:** App Store.
    - Needs a paid Apple Developer account (signing, TestFlight, App Store Connect); see `docs/AppStore.md`.
    - Real App Store screenshots from a device, a support URL and a privacy policy URL.

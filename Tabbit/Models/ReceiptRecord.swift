@@ -70,6 +70,28 @@ enum ReceiptSource: String, Codable {
     case manual
 }
 
+/// Whether a receipt is a personal expense or a business expense (for tax time).
+enum ExpenseKind: String, Codable, CaseIterable, Identifiable {
+    case personal
+    case business
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .personal: return "Personal"
+        case .business: return "Business"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .personal: return "person.fill"
+        case .business: return "briefcase.fill"
+        }
+    }
+}
+
 /// A receipt kept on the phone, in a group or in My Receipts (`groupID == nil`).
 struct ReceiptRecord: Identifiable, Equatable {
     let id: UUID
@@ -87,6 +109,8 @@ struct ReceiptRecord: Identifiable, Equatable {
     /// How it was paid ("Visa", "Cash"…). Empty if unknown.
     var paymentMethod: String
     var category: SpendCategory
+    /// Personal or business expense. New receipts are personal.
+    var expense: ExpenseKind
     /// Who paid. Defaults to me.
     var paidBy: UUID
     var items: [SplitItem]
@@ -116,7 +140,7 @@ struct ReceiptRecord: Identifiable, Equatable {
 
     init(id: UUID = UUID(), groupID: UUID? = nil, createdAt: Date = Date(), updatedAt: Date = Date(),
          merchant: String = "", location: String = "", date: Date = Calendar.current.startOfDay(for: Date()),
-         time: ClockTime? = nil, paymentMethod: String = "", category: SpendCategory = .other, paidBy: UUID = Person.meID, items: [SplitItem] = [],
+         time: ClockTime? = nil, paymentMethod: String = "", category: SpendCategory = .other, expense: ExpenseKind = .personal, paidBy: UUID = Person.meID, items: [SplitItem] = [],
          tax: Decimal? = nil, tip: TipValue? = nil, total: Decimal? = nil, includeFees: Bool = true,
          source: ReceiptSource = .manual, autofilled: Set<ReceiptField> = [], unreadable: Set<ReceiptField> = [],
          checks: [FieldCheck] = [], pageImageCount: Int = 0, scan: ScanResult? = nil, parsed: Receipt? = nil, languageCorrection: Bool? = nil,
@@ -131,6 +155,7 @@ struct ReceiptRecord: Identifiable, Equatable {
         self.time = time
         self.paymentMethod = paymentMethod
         self.category = category
+        self.expense = expense
         self.paidBy = paidBy
         self.items = items
         self.tax = tax
@@ -306,7 +331,9 @@ extension ReceiptRecord: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case schema, id, groupID, createdAt, updatedAt, merchant, location, date, time, paymentMethod, category
-        case paidBy, items
+        case expense, paidBy, items
+        /// Written by the unreleased 1.3 test build (Work): a receipt filed under a business.
+        case businessID
         case tax, tip, total, includeFees, source, autofilled, unreadable, checks, pageImageCount
         case scan, parsed, languageCorrection, place
     }
@@ -324,6 +351,7 @@ extension ReceiptRecord: Codable {
             time: try? container.decodeIfPresent(ClockTime.self, forKey: .time),
             paymentMethod: try container.decodeIfPresent(String.self, forKey: .paymentMethod) ?? "",
             category: try container.decodeIfPresent(SpendCategory.self, forKey: .category) ?? .other,
+            expense: try ReceiptRecord.decodeExpense(container),
             paidBy: try container.decodeIfPresent(UUID.self, forKey: .paidBy) ?? Person.meID,
             items: try container.decodeIfPresent([SplitItem].self, forKey: .items) ?? [],
             tax: try MoneyCoding.decodeIfPresent(container, forKey: .tax),
@@ -355,6 +383,7 @@ extension ReceiptRecord: Codable {
         try container.encodeIfPresent(time, forKey: .time)
         try container.encode(paymentMethod, forKey: .paymentMethod)
         try container.encode(category, forKey: .category)
+        try container.encode(expense, forKey: .expense)
         try container.encode(paidBy, forKey: .paidBy)
         try container.encode(items, forKey: .items)
         try container.encodeIfPresent(tax.map { value in MoneyCoding.text(value) }, forKey: .tax)
@@ -372,5 +401,17 @@ extension ReceiptRecord: Codable {
         try container.encodeIfPresent(parsed, forKey: .parsed)
         try container.encodeIfPresent(languageCorrection, forKey: .languageCorrection)
         try container.encodeIfPresent(place, forKey: .place)
+    }
+
+    /// Unknown values read as personal; a receipt the 1.3 test build filed under a
+    /// business (`businessID`, no `expense`) reads as a business expense.
+    private static func decodeExpense(_ container: KeyedDecodingContainer<CodingKeys>) throws -> ExpenseKind {
+        if let raw = try? container.decodeIfPresent(String.self, forKey: .expense) {
+            return ExpenseKind(rawValue: raw) ?? .personal
+        }
+        if (try? container.decodeIfPresent(UUID.self, forKey: .businessID)) != nil {
+            return .business
+        }
+        return .personal
     }
 }

@@ -11,6 +11,11 @@ enum Changelog {
     }
 
     static let entries: [Entry] = [
+        Entry(version: "1.3", title: "Personal and business", highlights: [
+            (symbol: "briefcase.fill", text: "Mark any receipt Personal or Business with one tap at the top of the editor, right after you scan it."),
+            (symbol: "line.3.horizontal.decrease.circle", text: "My Receipts filters by Personal or Business and shows this year's business total."),
+            (symbol: "tablecells", text: "Export just your business receipts as a CSV for tax time. Every export now has a Type column."),
+        ]),
         Entry(version: "1.2", title: "Map", highlights: [
             (symbol: "map.fill", text: "The new Map tab pins every receipt's store, from the address printed on the receipt. Tap a pin to see what you bought there."),
             (symbol: "airplane", text: "Each group has its own map too, so a trip shows everywhere you went."),

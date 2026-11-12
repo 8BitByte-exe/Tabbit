@@ -75,7 +75,7 @@ final class LogicTests: XCTestCase {
             .split(separator: "\r\n").map { line in String(line) }
         XCTAssertEqual(lines.count, 3)
         XCTAssertEqual(lines[0], CSVExporter.header.joined(separator: ","))
-        XCTAssertTrue(lines[1].hasPrefix("\"Trip, 2026\",2026-05-04,Market,Other,Sam,Bread,3.00,Everyone,1.00,,16.00"))
+        XCTAssertTrue(lines[1].hasPrefix("\"Trip, 2026\",2026-05-04,Market,Other,Personal,Sam,Bread,3.00,Everyone,1.00,,16.00"))
         XCTAssertTrue(lines[2].contains("Wine,12.00,Alex"))
     }
 
