@@ -171,6 +171,7 @@ struct ReceiptDetailPage: View {
                     MoneyText(amount: receipt.effectiveTotal, font: Theme.Fonts.bigMoney)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
+                    StatusPill(title: "\(receipt.expense.title) expense", symbol: receipt.expense.symbol, tone: .neutral)
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         Label(dateLine, systemImage: "calendar")
                         if !receipt.location.isEmpty {

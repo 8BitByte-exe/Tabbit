@@ -245,6 +245,9 @@ struct ReceiptRow: View {
                         .font(Theme.Fonts.caption)
                         .foregroundStyle(Theme.Colors.secondaryText)
                 }
+                if receipt.expense == .business {
+                    StatusPill(title: ExpenseKind.business.title, symbol: ExpenseKind.business.symbol, tone: .neutral)
+                }
             }
         }
         .accessibilityElement(children: .combine)

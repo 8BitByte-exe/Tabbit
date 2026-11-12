@@ -69,6 +69,11 @@ struct SettingsView: View {
                     }
                     .buttonStyle(NeumorphicButtonStyle(prominence: .secondary, compact: true))
                     .disabled(store.receipts.isEmpty)
+                    Button(action: exportBusinessCSV) {
+                        Label("Export Business Receipts (CSV)", systemImage: ExpenseKind.business.symbol)
+                    }
+                    .buttonStyle(NeumorphicButtonStyle(prominence: .secondary, compact: true))
+                    .disabled(!store.receipts.contains { receipt in receipt.expense == .business })
                 }
 
                 section("About") {
@@ -213,6 +218,16 @@ struct SettingsView: View {
 
     private func exportCSV() {
         if let url = CSVExporter.write(receipts: store.receipts, groups: store.groups, me: store.me) {
+            shareFile = ShareFile(url: url)
+        } else {
+            store.lastError = "Couldn't create the CSV file."
+        }
+    }
+
+    private func exportBusinessCSV() {
+        let business = store.receipts.filter { receipt in receipt.expense == .business }
+        if let url = CSVExporter.write(receipts: business, groups: store.groups, me: store.me,
+                                       fileName: "Tabbit-business-receipts.csv") {
             shareFile = ShareFile(url: url)
         } else {
             store.lastError = "Couldn't create the CSV file."
