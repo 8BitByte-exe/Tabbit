@@ -255,7 +255,7 @@ The owner cares a lot about design. Every new screen must use the design system.
   - When Tabbit isn't sure, it says so: `ReceiptRecord.checks` (`FieldCheck`, with a reason) shows a "Check" mark in the editor for a repaired store name, an ambiguous or far-off date, a category only Apple Intelligence or the items suggested, or totals that don't add up. Editing the field or saving clears it.
   - The payment method is the name only ("Visa", "Debit", "Cash"), never card digits. Short or ordinary words ("MC", "BAR", "CARD") only count on a line that pays an amount.
 - **App icon:** `Tabbit/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`, a single 1024×1024 opaque PNG that iOS scales and masks.
-  - It's generated from the owner's artwork `Design/AppIcon/app-icon-source.jpg` by `python3 Design/AppIcon/make_app_icon.py <source> <output>`. The script crops the tile out of the black mockup, repaints the old rounded corners, and adds a 6% background margin so iOS's mask doesn't clip the bunny's hole.
+  - It's generated from the owner's artwork `Design/AppIcon/app-icon-source.png` (a 3D white bunny peeking out of a black hole on a light background, already a full-bleed square with room around the hole) by `python3 Design/AppIcon/make_app_icon.py <source> <output>`. The script flattens it to opaque RGB, center-crops to a square if needed and scales it to 1024×1024, without changing the composition.
   - Rerun the script if the artwork changes.
   - If CI ever fails while compiling assets, the runner may be missing a simulator runtime. Try `xcodebuild -downloadPlatform iOS` before the build.
 
