@@ -6,15 +6,17 @@ enum CSVExporter {
     static let header = ["Group", "Date", "Merchant", "Category", "Paid by", "Item", "Item price",
                          "Shared by", "Tax", "Tip", "Total"]
 
-    static func csv(receipts: [ReceiptRecord], groups: [SplitGroup], me: Person) -> String {
+    static func csv(receipts: [ReceiptRecord], groups: [SplitGroup], me: Person, businesses: [Business] = []) -> String {
         let groupsByID = Dictionary(uniqueKeysWithValues: groups.map { group in (group.id, group) })
+        let businessesByID = Dictionary(uniqueKeysWithValues: businesses.map { business in (business.id, business) })
         var rows: [[String]] = [header]
         let sorted = receipts.sorted { first, second in first.date < second.date }
 
         for receipt in sorted {
             let group = receipt.groupID.flatMap { id in groupsByID[id] }
             let people = group?.members ?? [me]
-            let groupName = group?.displayName ?? "My Receipts"
+            let business = receipt.businessID.flatMap { id in businessesByID[id] }
+            let groupName = group?.displayName ?? business.map { business in "Work: \(business.displayName)" } ?? "My Receipts"
             let payer = name(receipt.paidBy, people: people, me: me)
             let base = [groupName, isoDate(receipt.date), receipt.displayTitle, receipt.category.title, payer]
             let fees = [plain(receipt.tax), plain(receipt.tip.map { tip in tip.amount(itemsSubtotal: receipt.itemsSubtotal) }),
@@ -43,8 +45,8 @@ enum CSVExporter {
     }
 
     /// Writes the CSV to the temporary folder and returns its URL.
-    static func write(receipts: [ReceiptRecord], groups: [SplitGroup], me: Person) -> URL? {
-        let text = csv(receipts: receipts, groups: groups, me: me)
+    static func write(receipts: [ReceiptRecord], groups: [SplitGroup], me: Person, businesses: [Business] = []) -> URL? {
+        let text = csv(receipts: receipts, groups: groups, me: me, businesses: businesses)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Tabbit-receipts.csv")
         do {
             try Data(text.utf8).write(to: url, options: [.atomic])

@@ -70,10 +70,15 @@ enum ReceiptSource: String, Codable {
     case manual
 }
 
-/// A receipt kept on the phone, in a group or in My Receipts (`groupID == nil`).
+/// A receipt kept on the phone: in a group, in a business (Work), or in My Receipts
+/// (`groupID == nil` and `businessID == nil`). It's never in a group and a business at once.
 struct ReceiptRecord: Identifiable, Equatable {
     let id: UUID
     var groupID: UUID?
+    /// The business this is an expense of (Work), with `groupID == nil`.
+    var businessID: UUID?
+    /// The job within that business, if any.
+    var jobID: UUID?
     var createdAt: Date
     var updatedAt: Date
 
@@ -114,7 +119,7 @@ struct ReceiptRecord: Identifiable, Equatable {
     /// Where the store is on the map, once Apple Maps has looked up its address (map turned on).
     var place: ReceiptPlace?
 
-    init(id: UUID = UUID(), groupID: UUID? = nil, createdAt: Date = Date(), updatedAt: Date = Date(),
+    init(id: UUID = UUID(), groupID: UUID? = nil, businessID: UUID? = nil, jobID: UUID? = nil, createdAt: Date = Date(), updatedAt: Date = Date(),
          merchant: String = "", location: String = "", date: Date = Calendar.current.startOfDay(for: Date()),
          time: ClockTime? = nil, paymentMethod: String = "", category: SpendCategory = .other, paidBy: UUID = Person.meID, items: [SplitItem] = [],
          tax: Decimal? = nil, tip: TipValue? = nil, total: Decimal? = nil, includeFees: Bool = true,
@@ -123,6 +128,8 @@ struct ReceiptRecord: Identifiable, Equatable {
          place: ReceiptPlace? = nil) {
         self.id = id
         self.groupID = groupID
+        self.businessID = businessID
+        self.jobID = jobID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.merchant = merchant
@@ -305,7 +312,7 @@ extension ReceiptRecord: Codable {
     static let schemaVersion = 2
 
     private enum CodingKeys: String, CodingKey {
-        case schema, id, groupID, createdAt, updatedAt, merchant, location, date, time, paymentMethod, category
+        case schema, id, groupID, businessID, jobID, createdAt, updatedAt, merchant, location, date, time, paymentMethod, category
         case paidBy, items
         case tax, tip, total, includeFees, source, autofilled, unreadable, checks, pageImageCount
         case scan, parsed, languageCorrection, place
@@ -316,6 +323,8 @@ extension ReceiptRecord: Codable {
         self.init(
             id: try container.decode(UUID.self, forKey: .id),
             groupID: try container.decodeIfPresent(UUID.self, forKey: .groupID),
+            businessID: try container.decodeIfPresent(UUID.self, forKey: .businessID),
+            jobID: try container.decodeIfPresent(UUID.self, forKey: .jobID),
             createdAt: try container.decode(Date.self, forKey: .createdAt),
             updatedAt: try container.decode(Date.self, forKey: .updatedAt),
             merchant: try container.decodeIfPresent(String.self, forKey: .merchant) ?? "",
@@ -347,6 +356,8 @@ extension ReceiptRecord: Codable {
         try container.encode(ReceiptRecord.schemaVersion, forKey: .schema)
         try container.encode(id, forKey: .id)
         try container.encodeIfPresent(groupID, forKey: .groupID)
+        try container.encodeIfPresent(businessID, forKey: .businessID)
+        try container.encodeIfPresent(jobID, forKey: .jobID)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
         try container.encode(merchant, forKey: .merchant)

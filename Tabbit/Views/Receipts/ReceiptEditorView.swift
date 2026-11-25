@@ -12,6 +12,8 @@ struct ReceiptEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var form: ReceiptForm
+    /// The job a business's receipt belongs to (Work).
+    @State private var jobID: UUID?
     @State private var errorMessage: String?
     @State private var dialog: ClayDialog?
     @State private var choosingCategory = false
@@ -34,6 +36,12 @@ struct ReceiptEditorView: View {
     init(session: EditorSession) {
         self.session = session
         _form = State(initialValue: ReceiptForm(session.record))
+        _jobID = State(initialValue: session.record.jobID)
+    }
+
+    /// The business this receipt is an expense of, if any.
+    private var business: Business? {
+        return store.business(session.record.businessID)
     }
 
     // MARK: - Derived
@@ -48,11 +56,13 @@ struct ReceiptEditorView: View {
 
     /// The receipt as it would be saved right now.
     private var preview: ReceiptRecord {
-        return form.record(updating: session.record)
+        var record = form.record(updating: session.record)
+        record.jobID = jobID
+        return record
     }
 
     private var hasChanges: Bool {
-        return session.isNew || form != ReceiptForm(session.record)
+        return session.isNew || form != ReceiptForm(session.record) || jobID != session.record.jobID
     }
 
     // MARK: - Body
@@ -63,6 +73,9 @@ struct ReceiptEditorView: View {
                 SheetHeader(title: session.isNew ? "New Receipt" : "Edit Receipt", onClose: close)
                 if session.isNew && session.record.source != .manual {
                     scanBanner
+                }
+                if let business = business, !business.jobs.isEmpty {
+                    jobCard(business)
                 }
                 detailsCard
                 if isShared {
@@ -175,7 +188,7 @@ struct ReceiptEditorView: View {
 
     private func save() {
         focus = nil
-        if let message = flow.save(form.record(updating: session.record), from: session) {
+        if let message = flow.save(preview, from: session) {
             errorMessage = message
         } else {
             dismiss()
@@ -360,6 +373,33 @@ struct ReceiptEditorView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Job (Work)
+
+    private func jobCard(_ business: Business) -> some View {
+        InfoCard {
+            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                SectionLabel(title: "Job at \(business.displayName)")
+                FlowLayout {
+                    jobChip(title: "No job", symbol: "tray", id: nil)
+                    ForEach(business.jobs.filter { job in !job.isFinished || job.id == jobID }) { job in
+                        jobChip(title: job.displayName, symbol: "hammer.fill", id: job.id)
+                    }
+                }
+            }
+        }
+    }
+
+    private func jobChip(title: String, symbol: String, id: UUID?) -> some View {
+        Button(action: {
+            jobID = id
+        }, label: {
+            Label(title, systemImage: symbol)
+        })
+        .buttonStyle(ClayChipStyle(isSelected: jobID == id))
+        .accessibilityLabel(id == nil ? "No job" : "Job, \(title)")
+        .accessibilityAddTraits(jobID == id ? [.isSelected] : [])
     }
 
     // MARK: - Paid by

@@ -11,6 +11,14 @@ enum Changelog {
     }
 
     static let entries: [Entry] = [
+        Entry(version: "1.3", title: "Work", highlights: [
+            (symbol: "briefcase.fill", text: "The new Work tab is for your business, or freelancing under your own name. See what you earned, spent and kept this year at a glance."),
+            (symbol: "hammer.fill", text: "Add a job for each client or project, and keep its invoices and expenses together."),
+            (symbol: "doc.text.fill", text: "Track invoices: attach the one you sent (scan, photo or PDF) and Tabbit reads the amount, number and dates. Tick it off when you're paid; overdue ones are flagged."),
+            (symbol: "doc.viewfinder", text: "Scan work receipts as usual and they add up as the year's expenses for that business."),
+            (symbol: "square.and.arrow.up", text: "Export a year of invoices and expenses as a spreadsheet for your accountant, and see how much to put aside for tax."),
+            (symbol: "lock.fill", text: "Like everything in Tabbit, your work stays on this iPhone."),
+        ]),
         Entry(version: "1.2", title: "Map", highlights: [
             (symbol: "map.fill", text: "The new Map tab pins every receipt's store, from the address printed on the receipt. Tap a pin to see what you bought there."),
             (symbol: "airplane", text: "Each group has its own map too, so a trip shows everywhere you went."),

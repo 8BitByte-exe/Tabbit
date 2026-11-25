@@ -15,6 +15,12 @@ struct AddReceiptSheet: View {
                 Label("Goes into \(group.displayName)", systemImage: group.category.symbol)
                     .font(Theme.Fonts.subheadline)
                     .foregroundStyle(Theme.Colors.secondaryText)
+            } else if let business = store.business(flow.targetBusinessID) {
+                let job = business.job(flow.targetJobID)
+                Label(job.map { job in "An expense for \(job.displayName)" } ?? "An expense for \(business.displayName)",
+                      systemImage: "briefcase.fill")
+                    .font(Theme.Fonts.subheadline)
+                    .foregroundStyle(Theme.Colors.secondaryText)
             }
 
             HStack(spacing: Theme.Spacing.m) {
