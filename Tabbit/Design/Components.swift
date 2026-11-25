@@ -327,13 +327,15 @@ private struct NeumorphicButtonLook: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         NeumorphicButtonBody(label: configuration.label, pressed: configuration.isPressed || holdsPress,
-                             prominence: prominence, fullWidth: fullWidth, compact: compact)
+                             tapped: holdsPress, prominence: prominence, fullWidth: fullWidth, compact: compact)
     }
 }
 
 private struct NeumorphicButtonBody: View {
     let label: ButtonStyleConfiguration.Label
     let pressed: Bool
+    /// True right after a real tap (not a touch that turned into a scroll).
+    let tapped: Bool
     let prominence: NeumorphicButtonStyle.Prominence
     let fullWidth: Bool
     let compact: Bool
@@ -359,7 +361,9 @@ private struct NeumorphicButtonBody: View {
             .scaleEffect(pressed && !reduceMotion ? Theme.Motion.pressedScale : 1)
             .animation(pressAnimation(pressed), value: pressed)
             .opacity(isEnabled ? 1 : 0.45)
-            .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: pressed) { _, isDown in isDown }
+            // The haptic marks a tap, not a touch: a finger resting on a button as a
+            // scroll starts no longer buzzes as if it had pressed it.
+            .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: tapped) { _, isTap in isTap }
     }
 
     private var foreground: Color {
@@ -396,13 +400,15 @@ private struct NeumorphicIconButtonLook: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         NeumorphicIconButtonBody(label: configuration.label, pressed: configuration.isPressed || holdsPress,
-                                 prominence: prominence, size: size)
+                                 tapped: holdsPress, prominence: prominence, size: size)
     }
 }
 
 private struct NeumorphicIconButtonBody: View {
     let label: ButtonStyleConfiguration.Label
     let pressed: Bool
+    /// True right after a real tap (not a touch that turned into a scroll).
+    let tapped: Bool
     let prominence: NeumorphicIconButtonStyle.Prominence
     let size: CGFloat
 
@@ -423,7 +429,9 @@ private struct NeumorphicIconButtonBody: View {
             .scaleEffect(pressed && !reduceMotion ? Theme.Motion.pressedScale : 1)
             .animation(pressAnimation(pressed), value: pressed)
             .opacity(isEnabled ? 1 : 0.45)
-            .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: pressed) { _, isDown in isDown }
+            // The haptic marks a tap, not a touch: a finger resting on a button as a
+            // scroll starts no longer buzzes as if it had pressed it.
+            .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: tapped) { _, isTap in isTap }
     }
 
     private var foreground: Color {
@@ -803,30 +811,160 @@ struct SwipeAction: Identifiable {
     let action: () -> Void
 }
 
-/// Shared bookkeeping for a horizontal swipe inside a vertical scroll view.
+/// A sideways swipe on a card inside a vertical scroll view.
 ///
-/// Decides once per drag whether it's sideways (a swipe) or up and down (a scroll),
-/// and holds taps on the row's buttons while a swipe is under way, so the tap that
-/// ends a swipe doesn't also open or close the card.
-private struct SwipeTracking {
-    /// nil until the drag has moved far enough to tell.
-    var isHorizontal: Bool?
-    var lastTranslation: CGFloat = 0
-    var lastPredicted: CGFloat = 0
+/// Scrolling must win: a drag that starts up or down is left entirely to the scroll
+/// view, and only a clearly sideways drag becomes a swipe. On iOS 18 and later this is
+/// a UIKit pan that declines to start unless the movement is sideways. A SwiftUI
+/// `DragGesture` there competes with the scroll view for every touch, so lists were
+/// hard to scroll and a drag could end as a tap on the card under the finger. iOS 17
+/// keeps the SwiftUI drag, which doesn't have that problem.
+///
+/// `onChanged` gets the sideways translation, `onEnded` the predicted end translation.
+/// Both are called only for sideways swipes, and `onEnded` also runs when iOS cancels one.
+private struct HorizontalSwipe: ViewModifier {
+    let onBegan: () -> Void
+    let onChanged: (CGFloat) -> Void
+    let onEnded: (CGFloat) -> Void
 
-    /// Returns true if this drag is a sideways swipe.
-    mutating func update(_ value: DragGesture.Value, gate: SwipeTapGate) -> Bool {
-        if isHorizontal == nil {
-            isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.3
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.gesture(HorizontalPanGesture(onBegan: onBegan, onChanged: onChanged, onEnded: onEnded))
+        } else {
+            content.modifier(LegacyHorizontalSwipe(onBegan: onBegan, onChanged: onChanged, onEnded: onEnded))
         }
-        guard isHorizontal == true else {
-            return false
+    }
+}
+
+private extension View {
+    func horizontalSwipe(onBegan: @escaping () -> Void = {},
+                         onChanged: @escaping (CGFloat) -> Void,
+                         onEnded: @escaping (CGFloat) -> Void) -> some View {
+        modifier(HorizontalSwipe(onBegan: onBegan, onChanged: onChanged, onEnded: onEnded))
+    }
+}
+
+/// True when a drag is clearly sideways rather than up and down.
+private func isSideways(_ translation: CGSize) -> Bool {
+    return abs(translation.width) > abs(translation.height) * 1.3
+}
+
+/// iOS 18+: a pan that only starts for a sideways drag, so up-and-down drags go
+/// straight to the scroll view (and cancel any button under the finger, as usual).
+@available(iOS 18.0, *)
+private struct HorizontalPanGesture: UIGestureRecognizerRepresentable {
+    let onBegan: () -> Void
+    let onChanged: (CGFloat) -> Void
+    let onEnded: (CGFloat) -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        return Coordinator()
+    }
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.maximumNumberOfTouches = 1
+        pan.delegate = context.coordinator
+        return pan
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        let translation = recognizer.translation(in: nil).x
+        // Roughly where a flick would carry the card, like DragGesture's predicted end.
+        let predicted = translation + recognizer.velocity(in: nil).x * 0.25
+        switch recognizer.state {
+        case .began:
+            onBegan()
+            onChanged(translation)
+        case .changed:
+            onChanged(translation)
+        case .ended, .cancelled, .failed:
+            onEnded(predicted)
+        default:
+            break
         }
-        lastTranslation = value.translation.width
-        lastPredicted = value.predictedEndTranslation.width
-        // Rolling hold: if iOS cancels the drag without an end event, taps come back by themselves.
-        gate.hold(for: 0.6)
-        return true
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else {
+                return true
+            }
+            let translation = pan.translation(in: nil)
+            if translation.x != 0 || translation.y != 0 {
+                return isSideways(CGSize(width: translation.x, height: translation.y))
+            }
+            let velocity = pan.velocity(in: nil)
+            return isSideways(CGSize(width: velocity.x, height: velocity.y))
+        }
+
+        /// The list's scroll view waits the moment it takes this pan to decide, so a
+        /// sideways drag always swipes the card and an up-and-down one always scrolls.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let scrollView = otherGestureRecognizer.view as? UIScrollView else {
+                return false
+            }
+            return otherGestureRecognizer === scrollView.panGestureRecognizer
+        }
+    }
+}
+
+/// iOS 17: the SwiftUI drag, deciding once per drag whether it's sideways.
+private struct LegacyHorizontalSwipe: ViewModifier {
+    let onBegan: () -> Void
+    let onChanged: (CGFloat) -> Void
+    let onEnded: (CGFloat) -> Void
+
+    /// nil until the drag has moved far enough to tell.
+    @State private var isHorizontal: Bool?
+    @State private var lastPredicted: CGFloat = 0
+    @GestureState private var isTouching = false
+
+    func body(content: Content) -> some View {
+        content
+            .simultaneousGesture(drag)
+            .onChange(of: isTouching) { _, touching in
+                // iOS can cancel a drag (when the list starts scrolling) without an end
+                // event. Settle the card anyway, so it never gets stuck half open.
+                if !touching && isHorizontal != nil {
+                    DispatchQueue.main.async {
+                        if isHorizontal == true {
+                            onEnded(lastPredicted)
+                        }
+                        isHorizontal = nil
+                    }
+                }
+            }
+    }
+
+    private var drag: some Gesture {
+        DragGesture(minimumDistance: 14)
+            .updating($isTouching) { _, state, _ in
+                state = true
+            }
+            .onChanged { value in
+                if isHorizontal == nil {
+                    let sideways = isSideways(value.translation)
+                    isHorizontal = sideways
+                    if sideways {
+                        onBegan()
+                    }
+                }
+                guard isHorizontal == true else {
+                    return
+                }
+                lastPredicted = value.predictedEndTranslation.width
+                onChanged(value.translation.width)
+            }
+            .onEnded { value in
+                let wasHorizontal = isHorizontal == true
+                isHorizontal = nil
+                if wasHorizontal {
+                    onEnded(value.predictedEndTranslation.width)
+                }
+            }
     }
 }
 
@@ -840,9 +978,8 @@ struct SwipeRow<Content: View>: View {
     private let content: Content
 
     @State private var drag: CGFloat = 0
-    @State private var tracking = SwipeTracking()
+    @State private var isSwiping = false
     @State private var gate = SwipeTapGate()
-    @GestureState private var isTouching = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let buttonSize: CGFloat = 52
@@ -890,54 +1027,31 @@ struct SwipeRow<Content: View>: View {
                 .environment(\.swipeTapGate, gate)
                 .offset(x: offset)
         }
-        .simultaneousGesture(dragGesture(base: base))
-        .onChange(of: isTouching) { _, touching in
-            // iOS can cancel a drag (when the list starts scrolling) without an end
-            // event. Settle the row anyway, so it never gets stuck half open.
-            if !touching && tracking.isHorizontal != nil {
-                DispatchQueue.main.async {
-                    if tracking.isHorizontal == true {
-                        settle(base: openRow == id ? -revealWidth : 0, predicted: tracking.lastPredicted)
-                    }
-                    tracking = SwipeTracking()
+        .horizontalSwipe(onBegan: {
+            isSwiping = true
+            if openRow != id && openRow != nil {
+                // Swiping another row closes the open one.
+                withAnimation(Theme.Motion.standard) {
+                    openRow = nil
                 }
             }
-        }
+        }, onChanged: { translation in
+            // Rolling hold: the buttons in the row ignore taps while it's being swiped.
+            gate.hold(for: 0.6)
+            drag = translation
+        }, onEnded: { predicted in
+            guard isSwiping else {
+                return
+            }
+            isSwiping = false
+            gate.hold(for: 0.35)
+            settle(base: openRow == id ? -revealWidth : 0, predicted: predicted)
+        })
         .accessibilityActions {
             ForEach(actions) { action in
                 Button(action.label, action: action.action)
             }
         }
-    }
-
-    private func dragGesture(base: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 14)
-            .updating($isTouching) { _, state, _ in
-                state = true
-            }
-            .onChanged { value in
-                let wasDecided = tracking.isHorizontal != nil
-                guard tracking.update(value, gate: gate) else {
-                    return
-                }
-                if !wasDecided && openRow != id && openRow != nil {
-                    // Swiping another row closes the open one.
-                    withAnimation(Theme.Motion.standard) {
-                        openRow = nil
-                    }
-                }
-                drag = value.translation.width
-            }
-            .onEnded { value in
-                defer {
-                    tracking = SwipeTracking()
-                }
-                guard tracking.isHorizontal == true else {
-                    return
-                }
-                gate.hold(for: 0.35)
-                settle(base: base, predicted: value.predictedEndTranslation.width)
-            }
     }
 
     /// Opens or closes the row where the swipe was heading.
@@ -978,9 +1092,8 @@ struct SwipeToConfirm<Content: View>: View {
     private let content: Content
 
     @State private var drag: CGFloat = 0
-    @State private var tracking = SwipeTracking()
+    @State private var isSwiping = false
     @State private var gate = SwipeTapGate()
-    @GestureState private var isTouching = false
 
     private let threshold: CGFloat = 110
 
@@ -1020,41 +1133,20 @@ struct SwipeToConfirm<Content: View>: View {
                 }
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: armed) { _, isArmed in isArmed }
-            .simultaneousGesture(dragGesture)
-            .onChange(of: isTouching) { _, touching in
-                if !touching && tracking.isHorizontal != nil {
-                    DispatchQueue.main.async {
-                        if tracking.isHorizontal == true {
-                            finish()
-                        }
-                        tracking = SwipeTracking()
-                    }
-                }
-            }
-            .accessibilityAction(named: title, onConfirm)
-    }
-
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 14)
-            .updating($isTouching) { _, state, _ in
-                state = true
-            }
-            .onChanged { value in
-                guard tracking.update(value, gate: gate) else {
+            .horizontalSwipe(onBegan: {
+                isSwiping = true
+            }, onChanged: { translation in
+                gate.hold(for: 0.6)
+                drag = translation
+            }, onEnded: { _ in
+                guard isSwiping else {
                     return
                 }
-                drag = value.translation.width
-            }
-            .onEnded { _ in
-                defer {
-                    tracking = SwipeTracking()
-                }
-                guard tracking.isHorizontal == true else {
-                    return
-                }
+                isSwiping = false
                 gate.hold(for: 0.35)
                 finish()
-            }
+            })
+            .accessibilityAction(named: title, onConfirm)
     }
 
     private func finish() {

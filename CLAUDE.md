@@ -195,6 +195,7 @@ The owner cares a lot about design. Every new screen must use the design system.
   - Buttons inside `SwipeRow` / `SwipeToConfirm` ignore the tap that ends a swipe (`SwipeTapGate`); without this, releasing a swipe "tapped" the card and closed the row again. Use `ClayPlainButtonStyle` instead of `.plain` for plain buttons that sit inside a swipeable card.
 - **Light/dark:** never use `preferredColorScheme` or animate a color-scheme change in SwiftUI; `AppearanceApplier` cross-fades the window.
 - **Lists** are `ScrollView` + `LazyVStack`. Rows with edit/move/delete are `SwipeRow` (slides left to reveal clay buttons, plus accessibility actions), not `List.swipeActions`. One-action swipes (Settle Up: mark paid, undo) are `SwipeToConfirm` (swipe right past the threshold).
+  - Scrolling must win over swipes and taps. Both use `horizontalSwipe`: on iOS 18+ a UIKit pan that only starts for a sideways drag (the list's scroll view waits for it to decide); a SwiftUI `DragGesture` on a card in a `ScrollView` fought the scroll and drags ended as taps. Don't attach `DragGesture`s to cards inside lists. Button haptics fire on the tap, not on touch-down.
 - **Chips wrap** with `FlowLayout`, so they stay inside their card; no horizontal chip scrolling.
 - **Drop-downs** use `Expandable`, which measures the content and animates its height so the card grows in place.
 - **Accessibility:**
