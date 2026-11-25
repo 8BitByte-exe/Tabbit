@@ -7,6 +7,7 @@ struct MyReceiptsView: View {
     @EnvironmentObject private var flow: ReceiptFlow
 
     @AppStorage("myReceipts.sort") private var sort: ReceiptSearch.SortOrder = .newest
+    @AppStorage("myReceipts.expense") private var expenseFilter: ReceiptSearch.ExpenseFilter = .all
     @State private var query = ""
     @State private var moving: ReceiptRecord?
     @State private var dialog: ClayDialog?
@@ -16,11 +17,12 @@ struct MyReceiptsView: View {
 
     var body: some View {
         let mine = store.receipts(in: nil)
-        let shown = ReceiptSearch.sorted(mine.filter { receipt in ReceiptSearch.matches(receipt, query: query) },
+        let filtered = mine.filter { receipt in expenseFilter.includes(receipt) }
+        let shown = ReceiptSearch.sorted(filtered.filter { receipt in ReceiptSearch.matches(receipt, query: query) },
                                          by: sort)
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: Theme.Spacing.l) {
-                ScreenHeader(title: "My Receipts", subtitle: subtitle(mine)) {
+                ScreenHeader(title: "My Receipts", subtitle: subtitle(mine, filter: expenseFilter)) {
                     Button(action: {
                         choosingSort = true
                     }, label: {
@@ -35,10 +37,20 @@ struct MyReceiptsView: View {
                                    message: "Scan your own receipts here to keep them and see your spending.")
                         .padding(.top, Theme.Spacing.xl)
                 } else {
+                    ClaySegmentedPicker(selection: $expenseFilter, options: ReceiptSearch.ExpenseFilter.allCases.map { filter in
+                        ClaySegmentedPicker<ReceiptSearch.ExpenseFilter>.Option(
+                            value: filter, title: filter.title, symbol: nil,
+                            accessibilityName: "Show \(filter.title.lowercased()) receipts")
+                    })
                     ClaySearchField(text: $query, prompt: "Search merchant, item, date or amount")
                     if shown.isEmpty {
-                        EmptyStateView(symbol: "magnifyingglass", title: "No matches",
-                                       message: "No receipt matches “\(query)”.")
+                        if query.isEmpty {
+                            EmptyStateView(symbol: ExpenseKind.business.symbol, title: "No \(expenseFilter.title.lowercased()) receipts",
+                                           message: "Mark a receipt Personal or Business at the top of its editor.")
+                        } else {
+                            EmptyStateView(symbol: "magnifyingglass", title: "No matches",
+                                           message: "No receipt matches “\(query)”.")
+                        }
                     }
                     ForEach(shown) { receipt in
                         row(receipt)
@@ -106,12 +118,17 @@ struct MyReceiptsView: View {
         }
     }
 
-    private func subtitle(_ receipts: [ReceiptRecord]) -> String {
+    private func subtitle(_ receipts: [ReceiptRecord], filter: ReceiptSearch.ExpenseFilter) -> String {
         if receipts.isEmpty {
             return "Your own receipts"
         }
+        if filter == .business {
+            let business = receipts.filter { receipt in receipt.expense == .business }
+            return "\(Money.string(ReceiptSearch.total(of: business, inYearOf: Date()))) business this year"
+        }
         let calendar = Calendar.current
         let total = receipts
+            .filter { receipt in filter.includes(receipt) }
             .filter { receipt in calendar.isDate(receipt.date, equalTo: Date(), toGranularity: .month) }
             .reduce(Decimal(0)) { sum, receipt in sum + receipt.effectiveTotal }
         return "\(Money.string(total)) this month"

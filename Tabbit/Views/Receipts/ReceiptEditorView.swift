@@ -64,6 +64,7 @@ struct ReceiptEditorView: View {
                 if session.isNew && session.record.source != .manual {
                     scanBanner
                 }
+                expensePicker
                 detailsCard
                 if isShared {
                     paidByCard
@@ -267,6 +268,14 @@ struct ReceiptEditorView: View {
     }
 
     // MARK: - Details
+
+    /// Personal or business: one tap, right where a scan lands.
+    private var expensePicker: some View {
+        ClaySegmentedPicker(selection: $form.expense, options: ExpenseKind.allCases.map { kind in
+            ClaySegmentedPicker<ExpenseKind>.Option(value: kind, title: kind.title, symbol: kind.symbol,
+                                                    accessibilityName: "\(kind.title) expense")
+        })
+    }
 
     private var detailsCard: some View {
         InfoCard {

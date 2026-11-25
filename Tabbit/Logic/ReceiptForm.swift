@@ -34,6 +34,7 @@ struct ReceiptForm: Equatable {
     var time: ClockTime?
     var paymentMethod: String
     var category: SpendCategory
+    var expense: ExpenseKind
     var paidBy: UUID
     var items: [Item]
     var taxText: String
@@ -49,6 +50,7 @@ struct ReceiptForm: Equatable {
         time = record.time
         paymentMethod = record.paymentMethod
         category = record.category
+        expense = record.expense
         paidBy = record.paidBy
         items = record.items.map { item in
             Item(id: item.id, name: item.name, priceText: MoneyInput.editText(item.price),
@@ -147,6 +149,7 @@ struct ReceiptForm: Equatable {
         record.time = time
         record.paymentMethod = paymentMethod.trimmingCharacters(in: .whitespacesAndNewlines)
         record.category = category
+        record.expense = expense
         record.paidBy = paidBy
         record.items = items.compactMap { item in
             let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)

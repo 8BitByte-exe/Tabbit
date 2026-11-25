@@ -3,7 +3,7 @@ import Foundation
 /// Exports receipts as CSV (one row per item; receipts without items get one row).
 enum CSVExporter {
 
-    static let header = ["Group", "Date", "Merchant", "Category", "Paid by", "Item", "Item price",
+    static let header = ["Group", "Date", "Merchant", "Category", "Type", "Paid by", "Item", "Item price",
                          "Shared by", "Tax", "Tip", "Total"]
 
     static func csv(receipts: [ReceiptRecord], groups: [SplitGroup], me: Person) -> String {
@@ -16,7 +16,8 @@ enum CSVExporter {
             let people = group?.members ?? [me]
             let groupName = group?.displayName ?? "My Receipts"
             let payer = name(receipt.paidBy, people: people, me: me)
-            let base = [groupName, isoDate(receipt.date), receipt.displayTitle, receipt.category.title, payer]
+            let base = [groupName, isoDate(receipt.date), receipt.displayTitle, receipt.category.title,
+                        receipt.expense.title, payer]
             let fees = [plain(receipt.tax), plain(receipt.tip.map { tip in tip.amount(itemsSubtotal: receipt.itemsSubtotal) }),
                         plain(receipt.effectiveTotal)]
             if receipt.items.isEmpty {
@@ -43,9 +44,10 @@ enum CSVExporter {
     }
 
     /// Writes the CSV to the temporary folder and returns its URL.
-    static func write(receipts: [ReceiptRecord], groups: [SplitGroup], me: Person) -> URL? {
+    static func write(receipts: [ReceiptRecord], groups: [SplitGroup], me: Person,
+                      fileName: String = "Tabbit-receipts.csv") -> URL? {
         let text = csv(receipts: receipts, groups: groups, me: me)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Tabbit-receipts.csv")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
         do {
             try Data(text.utf8).write(to: url, options: [.atomic])
             return url

@@ -33,6 +33,38 @@ enum ReceiptSearch {
         }
     }
 
+    /// My Receipts' Personal / Business / All filter.
+    enum ExpenseFilter: String, CaseIterable, Identifiable {
+        case all
+        case personal
+        case business
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all: return "All"
+            case .personal: return ExpenseKind.personal.title
+            case .business: return ExpenseKind.business.title
+            }
+        }
+
+        func includes(_ receipt: ReceiptRecord) -> Bool {
+            switch self {
+            case .all: return true
+            case .personal: return receipt.expense == .personal
+            case .business: return receipt.expense == .business
+            }
+        }
+    }
+
+    /// The total of the receipts dated in the given calendar year.
+    static func total(of receipts: [ReceiptRecord], inYearOf date: Date, calendar: Calendar = .current) -> Decimal {
+        return receipts
+            .filter { receipt in calendar.isDate(receipt.date, equalTo: date, toGranularity: .year) }
+            .reduce(Decimal(0)) { sum, receipt in sum + receipt.effectiveTotal }
+    }
+
     /// True if the query matches the merchant, location, payment method, category, date, an amount or an item.
     /// Every word of the query must match something.
     static func matches(_ receipt: ReceiptRecord, query: String) -> Bool {
@@ -46,7 +78,8 @@ enum ReceiptSearch {
 
     static func searchableText(for receipt: ReceiptRecord) -> String {
         var parts: [String] = [receipt.merchant, receipt.location, receipt.paymentMethod,
-                               receipt.category.title, receipt.category.rawValue]
+                               receipt.category.title, receipt.category.rawValue,
+                               receipt.expense.title]
         parts.append(contentsOf: receipt.items.map { item in item.name })
         parts.append(contentsOf: dateStrings(receipt.date))
         parts.append(contentsOf: amountStrings(receipt.effectiveTotal))

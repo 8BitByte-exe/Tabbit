@@ -130,6 +130,9 @@ enum DemoMode {
             // On a receipt, but Apple Maps found nothing for it: listed under "Not on the Map".
             (notFound(ReceiptRecord(merchant: "Corner Kiosk", location: "Kiosk 3, Old Town",
                                     date: daysAgo(2), category: .shopping, total: amount("6.50"))), nil),
+            (ReceiptRecord(merchant: "Shell", location: "1200 Bay St, Toronto", date: daysAgo(1), category: .fuel,
+                           expense: .business, items: [item("Fuel", "64.10")], tax: amount("8.33"),
+                           source: .camera), nil),
             (ReceiptRecord(merchant: "Hardware Plus", date: daysAgo(1), category: .household,
                            items: [item("Extension cord", "12.99"), item("Wood screws", "6.49")],
                            tax: amount("1.56")), nil),
